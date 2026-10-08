@@ -228,7 +228,7 @@ def api_detections_csv():
 def api_species():
     conn = db.connect()
     try:
-        return jsonify(queries.species_list(conn))
+        return jsonify(queries.species_list(conn, frigate.cached_events(), frigate.missing_events()))
     finally:
         conn.close()
 
@@ -237,7 +237,7 @@ def api_species():
 def api_species_detail(sci):
     conn = db.connect()
     try:
-        return jsonify(queries.species_detail(conn, sci))
+        return jsonify(queries.species_detail(conn, sci, have=frigate.cached_events()))
     finally:
         conn.close()
 
