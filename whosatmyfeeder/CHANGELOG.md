@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.3
+
+- Species pictures: use the best detection that still has a picture (cached
+  here or still in Frigate) instead of the best-scoring one overall, which is
+  often long gone from Frigate.
+- Remember events Frigate has purged, so pages don't re-request them from
+  Frigate on every view.
+
 ## 2.0.2
 
 - Fix startup crash: install libusb, which tflite_support loads at import

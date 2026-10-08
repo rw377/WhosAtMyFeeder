@@ -208,22 +208,37 @@ def cameras(conn):
 
 # ------------------------------------------------------------------ species
 
-def species_list(conn):
+def pick_photo_events(conn, have, gone):
+    """For each species, the event to show as its picture: the highest-scoring one we
+    have a cached picture for, otherwise the most recent one Frigate hasn't purged
+    (recent events are the likeliest to still be in Frigate)."""
+    best, latest = {}, {}
+    for r in conn.execute("SELECT display_name, frigate_event, score, detection_time FROM detections"):
+        sci, ev = r[0], r[1]
+        if ev in have and (sci not in best or r[2] > best[sci][0]):
+            best[sci] = (r[2], ev)
+        if ev not in gone and (sci not in latest or r[3] > latest[sci][0]):
+            latest[sci] = (r[3], ev)
+    out = {sci: ev for sci, (_, ev) in latest.items()}
+    out.update({sci: ev for sci, (_, ev) in best.items()})
+    return out
+
+
+def species_list(conn, have=frozenset(), gone=frozenset()):
     rows = conn.execute("""
         SELECT d.display_name, %s AS common_name, COUNT(*) AS n, MIN(%s) AS first, MAX(%s) AS last,
-               AVG(d.score) AS avg_score, COALESCE(p.hidden, 0) AS hidden,
-               (SELECT x.frigate_event FROM detections x WHERE x.display_name = d.display_name
-                ORDER BY x.score DESC LIMIT 1) AS best_event
+               AVG(d.score) AS avg_score, COALESCE(p.hidden, 0) AS hidden
         FROM detections d %s LEFT JOIN species_prefs p ON p.scientific_name = d.display_name
         GROUP BY d.display_name ORDER BY n DESC
     """ % (COMMON, TIME, TIME, NAMES_JOIN)).fetchall()
+    photos = pick_photo_events(conn, have, gone)
     return [{'scientific_name': r['display_name'], 'common_name': r['common_name'], 'visits': r['n'],
              'first': r['first'].replace(' ', 'T'), 'last': r['last'].replace(' ', 'T'),
              'avg_score': round(r['avg_score'], 3), 'hidden': bool(r['hidden']),
-             'best_event': r['best_event']} for r in rows]
+             'best_event': photos.get(r['display_name'])} for r in rows]
 
 
-def species_detail(conn, sci, now=None):
+def species_detail(conn, sci, now=None, have=frozenset(), gone=frozenset()):
     now = now or datetime.now()
     base = conn.execute("""
         SELECT COUNT(*) AS n, MIN(%s) AS first, MAX(%s) AS last, AVG(d.score) AS avg_score,
@@ -265,8 +280,15 @@ def species_detail(conn, sci, now=None):
         cal.append({'date': d.isoformat(), 'n': counts.get(d.isoformat(), 0)})
         d += timedelta(days=1)
     out['calendar'] = cal
-    best = conn.execute("SELECT %s FROM detections d %s WHERE d.display_name = ? ORDER BY d.score DESC LIMIT 1"
-                        % (DET_COLUMNS, NAMES_JOIN), (sci,)).fetchone()
+    # Best shot: highest score with a picture we still have, else the best overall.
+    best = None
+    for r in conn.execute("SELECT %s FROM detections d %s WHERE d.display_name = ? ORDER BY d.score DESC"
+                          % (DET_COLUMNS, NAMES_JOIN), (sci,)):
+        if best is None:
+            best = r
+        if r['frigate_event'] in have:
+            best = r
+            break
     out['best'] = det_dict(best)
     out['photos'] = [det_dict(r) for r in conn.execute(
         "SELECT %s FROM detections d %s WHERE d.display_name = ? ORDER BY d.detection_time DESC LIMIT 12"

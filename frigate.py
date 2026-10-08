@@ -38,19 +38,39 @@ def save_snapshot(event_id, kind, content):
     return path
 
 
-def fetch_snapshot(frigate_url, event_id, kind):
-    """Download from Frigate. Returns bytes or None."""
-    if not valid_event(event_id):
-        return None
-    params = {'crop': 1, 'quality': 90} if kind == 'crop' else {'quality': 90}
-    try:
-        r = requests.get('%s/api/events/%s/snapshot.jpg' % (frigate_url.rstrip('/'), event_id),
-                         params=params, timeout=TIMEOUT)
-        if r.status_code == 200 and r.headers.get('Content-Type', '').startswith('image/'):
-            return r.content
-    except requests.RequestException as e:
-        print('Frigate snapshot fetch failed for %s: %s' % (event_id, e), flush=True)
-    return None
+def fetch_snapshot(frigate_url, event_id, kind, with_status=False):
+    """Download from Frigate. Returns bytes or None (or (bytes, gone) with with_status,
+    where gone means Frigate answered and no longer has the event)."""
+    content, gone = None, False
+    if valid_event(event_id):
+        params = {'crop': 1, 'quality': 90} if kind == 'crop' else {'quality': 90}
+        try:
+            r = requests.get('%s/api/events/%s/snapshot.jpg' % (frigate_url.rstrip('/'), event_id),
+                             params=params, timeout=TIMEOUT)
+            if r.status_code == 200 and r.headers.get('Content-Type', '').startswith('image/'):
+                content = r.content
+            elif r.status_code in (404, 410):
+                gone = True
+        except requests.RequestException as e:
+            print('Frigate snapshot fetch failed for %s: %s' % (event_id, e), flush=True)
+    return (content, gone) if with_status else content
+
+
+def _missing_marker(event_id):
+    return os.path.join(SNAP_DIR, 'missing', event_id)
+
+
+def cached_events():
+    """Event ids that have a cached picture."""
+    if not os.path.isdir(SNAP_DIR):
+        return set()
+    return {n[:-len('.crop.jpg')] for n in os.listdir(SNAP_DIR) if n.endswith('.crop.jpg')}
+
+
+def missing_events():
+    """Event ids Frigate has told us it no longer has."""
+    d = os.path.join(SNAP_DIR, 'missing')
+    return set(os.listdir(d)) if os.path.isdir(d) else set()
 
 
 def get_snapshot(frigate_url, event_id, kind, cache=True):
@@ -58,8 +78,14 @@ def get_snapshot(frigate_url, event_id, kind, cache=True):
     path = snapshot_path(event_id, kind)
     if os.path.exists(path):
         return path
-    content = fetch_snapshot(frigate_url, event_id, kind)
+    marker = _missing_marker(event_id)
+    if os.path.exists(marker):
+        return None  # Frigate already said it's gone; don't ask again on every page view
+    content, gone = fetch_snapshot(frigate_url, event_id, kind, with_status=True)
     if content is None:
+        if gone:
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            open(marker, 'w').close()
         return None
     if cache:
         return save_snapshot(event_id, kind, content)
