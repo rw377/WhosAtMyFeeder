@@ -1,0 +1,37 @@
+name: Who's At My Feeder
+version: "2.0.0"
+slug: whosatmyfeeder
+description: Identifies the bird species Frigate detects, with searchable history, stats and MQTT alerts.
+url: https://github.com/rw377/WhosAtMyFeeder
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+ingress: true
+ingress_port: 7766
+panel_icon: mdi:bird
+panel_title: Feeder
+hassio_api: true
+services:
+  - mqtt:want
+ports:
+  7766/tcp: null
+ports_description:
+  7766/tcp: Direct web UI access (optional; the sidebar panel works without it)
+options:
+  frigate_url: http://ccab4aaf-frigate:5000
+  cameras:
+    - birdcam
+  frigate_topic: frigate
+  threshold: 0.7
+schema:
+  frigate_url: url
+  cameras:
+    - str
+  frigate_topic: str
+  threshold: float(0.1,0.99)
+  mqtt_server: str?
+  mqtt_port: port?
+  mqtt_username: str?
+  mqtt_password: password?
