@@ -19,7 +19,7 @@ This fork adds a new interface and alerting on top of the original detector:
 ### Home Assistant add-on
 
 Add this repository in **Settings → Add-ons → Add-on Store → ⋮ → Repositories**:
-`https://github.com/rw377/WhosAtMyFeeder`, then install **Who's At My Feeder**.
+`https://github.com/rw377/WhosAtMyFeeder`, then install **Who's At My Feeder - Fork**.
 See [whosatmyfeeder/DOCS.md](whosatmyfeeder/DOCS.md) for options and for moving data over from the original add-on.
 
 ### Docker
