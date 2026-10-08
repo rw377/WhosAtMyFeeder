@@ -1,6 +1,8 @@
 # Who's At My Feeder?
 ## Version 2.0
 
+WARNING/NOTE: This 2.0 fork is heavily vibe-coded, but working well for me. It was used to improve the interface and add MQTT alerting, as well as more customization and options. More details below. 
+
 This fork adds a new interface and alerting on top of the original detector:
 
 * **Today**: latest visit, recent visits grouped by species, and an hour-by-hour heatmap.
