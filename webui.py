@@ -21,7 +21,7 @@ VERSION = '2.0.0'
 APP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'app')
 
 app = Flask(__name__, static_folder=None)
-app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # database import
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # database or backup import
 
 _config = None
 
@@ -151,6 +151,7 @@ def api_status():
             'config_threshold': float(cfg['classification']['threshold']),
             'cache': frigate.cache_usage(),
             'last_detection': rt.get('last_detection'),
+            'detector_error': rt.get('detector_error'),
         })
     finally:
         conn.close()
@@ -447,17 +448,71 @@ def api_mqtt_test():
 
 # ------------------------------------------------------------------ import from another install
 
+class ImportError_(Exception):
+    pass
+
+
+def _extract_from_backup(path, out_db):
+    """Pull speciesid.db out of a Home Assistant backup (.tar) or an add-on archive
+    (.tar.gz) into out_db. Returns True if found."""
+    import shutil
+    import tarfile
+
+    def search(tf):
+        names = {m.name: m for m in tf.getmembers() if m.isfile()}
+        for name, m in names.items():
+            if name.endswith('speciesid.db'):
+                with tf.extractfile(m) as src, open(out_db, 'wb') as dst:
+                    shutil.copyfileobj(src, dst)
+                wal = names.get(name + '-wal')
+                if wal is not None:
+                    with tf.extractfile(wal) as src, open(out_db + '-wal', 'wb') as dst:
+                        shutil.copyfileobj(src, dst)
+                return True
+        encrypted = False
+        for name, m in names.items():
+            if name.endswith(('.tar.gz', '.tgz', '.tar')):
+                try:
+                    with tf.extractfile(m) as inner_f, tarfile.open(fileobj=inner_f, mode='r:*') as inner:
+                        if search(inner):
+                            return True
+                except (tarfile.TarError, OSError, EOFError):
+                    encrypted = True  # Home Assistant encrypts inner archives in protected backups
+        if encrypted:
+            raise ImportError_('That backup is still encrypted. Download it again from Settings > System > '
+                               'Backups in Home Assistant, which decrypts it as it downloads.')
+        return False
+
+    with tarfile.open(path, mode='r:*') as tf:
+        return search(tf)
+
+
 @app.route('/api/import', methods=['POST'])
 def api_import():
+    """Merge detections from another install. Accepts a speciesid.db file, or a Home
+    Assistant backup containing one (for example a backup of the original add-on)."""
+    import tarfile
     if request.headers.get('X-Requested-With') != 'wamf':
         abort(415)
     f = request.files.get('file')
     if not f:
         abort(400, 'no file uploaded')
-    fd, tmp = tempfile.mkstemp(suffix='.db', dir=db.DATA_DIR)
-    os.close(fd)
+    work = tempfile.mkdtemp(dir=db.DATA_DIR)
+    upload = os.path.join(work, 'upload')
+    tmp = os.path.join(work, 'speciesid.db')
     try:
-        f.save(tmp)
+        f.save(upload)
+        if tarfile.is_tarfile(upload):
+            try:
+                found = _extract_from_backup(upload, tmp)
+            except ImportError_ as e:
+                abort(400, str(e))
+            except (tarfile.TarError, OSError, EOFError):
+                abort(400, 'could not read that backup file')
+            if not found:
+                abort(400, 'no WhosAtMyFeeder database (speciesid.db) found in that backup')
+        else:
+            os.replace(upload, tmp)
         try:
             src = sqlite3.connect('file:%s?mode=ro' % tmp, uri=True)
             src.execute("SELECT detection_time, detection_index, score, display_name, category_name, "
@@ -480,10 +535,8 @@ def api_import():
             conn.close()
         return jsonify({'ok': True, 'imported': after - before})
     finally:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+        import shutil
+        shutil.rmtree(work, ignore_errors=True)
 
 
 @app.route('/api/export.db')

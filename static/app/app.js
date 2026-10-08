@@ -125,7 +125,7 @@
       var txt = document.getElementById('status-text');
       var on = s.mqtt && s.mqtt.connected;
       pill.className = 'pill status ' + (on ? 'on' : 'off');
-      txt.textContent = on ? (s.cameras.join(', ') || 'camera') + ' · live' : 'MQTT offline';
+      txt.textContent = s.detector_error ? 'detection off' : on ? (s.cameras.join(', ') || 'camera') + ' · live' : 'MQTT offline';
       pill.title = on ? 'Connected to ' + s.broker + ' since ' + fmtShort(s.mqtt.since) : 'Not connected to ' + s.broker;
       return s;
     }).catch(function () {
@@ -176,7 +176,9 @@
       return view(r, token);
     }).then(function (html) {
       if (token !== renderToken || html === undefined) return;
-      main.innerHTML = html;
+      main.innerHTML = (status && status.detector_error
+        ? '<div class="flagbox" role="alert" style="margin:0">Bird detection isn’t running: the classifier failed to load (' + esc(status.detector_error) + '). History, settings and import still work. Check the add-on log.</div>'
+        : '') + html;
       main.classList.remove('loading');
       if (view.after) view.after(r);
       if (!samePage && !keepScroll) { window.scrollTo(0, 0); }
@@ -913,9 +915,9 @@
       '<p class="mono muted" style="margin:0">' + num(status.cache.files) + ' files · ' + fmtBytes(status.cache.bytes) + '</p></section>' +
       '<section class="card pad stack"><div><h2>External address</h2><p class="sub">Optional. If this app is reachable at a URL, it goes in MQTT payloads as <span class="mono">snapshot_url</span>. Not needed for the Home Assistant camera entity.</p></div>' +
       '<label class="lf"><span class="label">Base URL</span><input class="field mono" id="st-base" placeholder="http://192.168.1.10:7766" value="' + esc(st.snapshots.base_url) + '"></label></section>' +
-      '<section class="card pad stack"><div><h2>Move or back up your data</h2><p class="sub">Download the detection database, or import one from another install (for example the original WhosAtMyFeeder add-on). Imports merge; nothing already here is overwritten.</p></div>' +
+      '<section class="card pad stack"><div><h2>Move or back up your data</h2><p class="sub">Download the detection database, or import history from another install. You can upload a <span class="mono">speciesid.db</span> file, or a Home Assistant backup of the original WhosAtMyFeeder add-on (the <span class="mono">.tar</span> file, unencrypted). Imports merge; nothing already here is overwritten.</p></div>' +
       '<div class="inline"><a class="btn" href="api/export.db" download>' + ICON.down + 'Download database</a>' +
-      '<label class="btn" style="cursor:pointer">Import database…<input type="file" id="st-import" accept=".db,.sqlite,application/octet-stream" class="vh"></label>' +
+      '<label class="btn" style="cursor:pointer">Import database or backup…<input type="file" id="st-import" accept=".db,.sqlite,.tar,.tgz,.gz,application/octet-stream,application/x-tar" class="vh"></label>' +
       '<span id="st-import-msg"></span></div></section>';
   }
 

@@ -9,9 +9,6 @@ import numpy as np
 import paho.mqtt.client as mqtt
 import requests
 from PIL import Image, ImageOps
-from tflite_support.task import core
-from tflite_support.task import processor
-from tflite_support.task import vision
 
 import db
 import frigate
@@ -26,6 +23,7 @@ BACKGROUND_INDEX = 964  # the model's "background" class
 
 
 def classify(image):
+    from tflite_support.task import vision
     tensor_image = vision.TensorImage.create_from_array(image)
     categories = classifier.classify(tensor_image)
     return categories.classifications[0].categories
@@ -193,21 +191,33 @@ def main():
     print("Python " + sys.version, flush=True)
 
     load_config()
-
-    base_options = core.BaseOptions(file_name=config['classification']['model'], use_coral=False, num_threads=4)
-    classification_options = processor.ClassificationOptions(max_results=1, score_threshold=0)
-    options = vision.ImageClassifierOptions(base_options=base_options, classification_options=classification_options)
-    global classifier
-    classifier = vision.ImageClassifier.create_from_options(options)
-
     db.migrate()
+
+    # Load the model before starting anything. If it fails, still serve the web
+    # UI (history, settings, import) and say why detection is off.
+    global classifier
+    try:
+        from tflite_support.task import core, processor, vision
+        base_options = core.BaseOptions(file_name=config['classification']['model'], use_coral=False, num_threads=4)
+        classification_options = processor.ClassificationOptions(max_results=1, score_threshold=0)
+        options = vision.ImageClassifierOptions(base_options=base_options, classification_options=classification_options)
+        classifier = vision.ImageClassifier.create_from_options(options)
+        db.set_runtime('detector_error', None)
+        db.set_runtime('mqtt', {'connected': False, 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
+    except Exception as e:
+        print("Bird classifier failed to load, detection is OFF: %r" % e, flush=True)
+        db.set_runtime('detector_error', str(e))
+        db.set_runtime('mqtt', {'connected': False, 'error': 'detector not running',
+                                'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
+
     print("Starting processes for the web UI and MQTT", flush=True)
     flask_process = multiprocessing.Process(target=run_webui)
-    mqtt_process = multiprocessing.Process(target=run_mqtt_client)
     flask_process.start()
-    mqtt_process.start()
+    if classifier is not None:
+        mqtt_process = multiprocessing.Process(target=run_mqtt_client)
+        mqtt_process.start()
+        mqtt_process.join()
     flask_process.join()
-    mqtt_process.join()
 
 
 if __name__ == '__main__':
