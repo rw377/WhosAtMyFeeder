@@ -1,9 +1,11 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+# The app needs Python 3.8 on Debian (tflite_support has no Alpine wheels), so
+# this deliberately does not build FROM the Home Assistant base image that the
+# Supervisor passes in as BUILD_FROM.
+FROM python:3.8-slim-bookworm
 
 ARG BUILD_VERSION
-ARG WAMF_REPO
-ARG WAMF_REF
+ARG WAMF_REPO=https://github.com/rw377/WhosAtMyFeeder
+ARG WAMF_REF=master
 
 # The add-on build context is only this folder, so the app source is fetched
 # from the repository. BUILD_VERSION is echoed so a version bump always

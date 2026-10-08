@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1
+
+- Fix add-on install: the Supervisor rejected the base image in build.yaml and
+  fell back to its Alpine image (no apt-get). build.yaml is removed and the
+  Dockerfile now names its Debian Python 3.8 base directly.
+
 ## 2.0.0
 
 - New web UI: Today dashboard, searchable history, species pages, stats, settings.
