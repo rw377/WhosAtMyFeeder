@@ -16,6 +16,43 @@ This fork adds a new interface and alerting on top of the original detector:
 * **Snapshots are kept** locally, so pictures survive Frigate's retention.
 * Works behind Home Assistant ingress. Existing `speciesid.db` files upgrade automatically.
 
+### Screenshots
+
+*Taken with sample data. Gray bird tiles are the placeholder shown when a picture isn't available.*
+
+**Today**: latest visit, today's numbers, recent visits grouped by species, and an hour-by-hour heatmap.
+
+![Today dashboard](docs/screenshots/today.png)
+
+**Stats**: visits over time with a 7-day average, most common species, species per week, busiest hours, the life list, and items waiting for review.
+
+![Stats page](docs/screenshots/stats.png)
+
+**Settings → Notifications**: MQTT alerts with a per-species watchlist, life-list firsts, returning species, quiet hours, and a ready-to-paste Home Assistant automation.
+
+![Notification settings](docs/screenshots/settings-notifications.png)
+
+**Settings → Detection & thresholds**: global confidence threshold, review flags, visit grouping, and hidden species.
+
+![Detection settings](docs/screenshots/settings-detection.png)
+
+<details>
+<summary>More: history search, species page, phone layout</summary>
+
+**History**
+
+![History search](docs/screenshots/history.png)
+
+**Species page**
+
+![Species page](docs/screenshots/species.png)
+
+**On a phone**
+
+<img src="docs/screenshots/mobile-today.png" alt="Today on a phone" width="320">
+
+</details>
+
 ### Home Assistant add-on
 
 Add this repository in **Settings → Add-ons → Add-on Store → ⋮ → Repositories**:
