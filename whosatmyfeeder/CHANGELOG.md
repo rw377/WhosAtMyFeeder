@@ -2,6 +2,8 @@
 
 ## 2.0.2
 
+- Fix startup crash: install libusb, which tflite_support loads at import
+  ("libusb-1.0.so.0: cannot open shared object file").
 - Import accepts a Home Assistant backup of the original add-on (the .tar from
   Settings → System → Backups), so moving your history over needs no terminal.
 

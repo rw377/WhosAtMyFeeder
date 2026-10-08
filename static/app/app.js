@@ -125,7 +125,7 @@
       var txt = document.getElementById('status-text');
       var on = s.mqtt && s.mqtt.connected;
       pill.className = 'pill status ' + (on ? 'on' : 'off');
-      txt.textContent = on ? (s.cameras.join(', ') || 'camera') + ' · live' : 'MQTT offline';
+      txt.textContent = s.detector_error ? 'detection off' : on ? (s.cameras.join(', ') || 'camera') + ' · live' : 'MQTT offline';
       pill.title = on ? 'Connected to ' + s.broker + ' since ' + fmtShort(s.mqtt.since) : 'Not connected to ' + s.broker;
       return s;
     }).catch(function () {
@@ -176,7 +176,9 @@
       return view(r, token);
     }).then(function (html) {
       if (token !== renderToken || html === undefined) return;
-      main.innerHTML = html;
+      main.innerHTML = (status && status.detector_error
+        ? '<div class="flagbox" role="alert" style="margin:0">Bird detection isn’t running: the classifier failed to load (' + esc(status.detector_error) + '). History, settings and import still work. Check the add-on log.</div>'
+        : '') + html;
       main.classList.remove('loading');
       if (view.after) view.after(r);
       if (!samePage && !keepScroll) { window.scrollTo(0, 0); }

@@ -11,7 +11,7 @@ ARG WAMF_REF=master
 # from the repository. BUILD_VERSION is echoed so a version bump always
 # re-fetches instead of reusing a cached layer.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git tzdata ca-certificates \
+    && apt-get install -y --no-install-recommends git tzdata ca-certificates libusb-1.0-0 \
     && echo "Building Who's At My Feeder ${BUILD_VERSION} from ${WAMF_REPO}@${WAMF_REF}" \
     && git clone --depth 1 --branch "${WAMF_REF}" "${WAMF_REPO}" /app \
     && pip install --no-cache-dir -r /app/requirements.txt \

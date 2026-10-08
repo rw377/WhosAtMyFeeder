@@ -151,6 +151,7 @@ def api_status():
             'config_threshold': float(cfg['classification']['threshold']),
             'cache': frigate.cache_usage(),
             'last_detection': rt.get('last_detection'),
+            'detector_error': rt.get('detector_error'),
         })
     finally:
         conn.close()

@@ -1,7 +1,7 @@
 FROM python:3.8-slim-bookworm
 
-# tzdata so the TZ environment variable gives local detection times
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+# tzdata so TZ gives local detection times; libusb is loaded by tflite_support at import
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata libusb-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
