@@ -36,13 +36,15 @@ If you used the WhosAtMyFeeder add-on from
 `/data/speciesid.db` inside that add-on's container. The database format is the
 same, so it imports directly:
 
-1. Open a shell with the **Advanced SSH & Web Terminal** add-on (protection mode
-   off) and copy the database somewhere you can reach:
-   `docker cp addon_932a64e5_whosatmyfeeder:/data/speciesid.db /share/speciesid.db`
-   (`932a64e5_whosatmyfeeder` is the old add-on's slug; its Info page shows it as
-   the hostname with a dash instead of the underscore).
-2. Download `/share/speciesid.db` with the Samba share or File editor add-on.
-3. In this app, go to **Settings → Snapshots & data → Import database**.
+1. In Home Assistant, go to **Settings → System → Backups** and make a backup
+   that includes only the old **WhosAtMyFeeder add-on** (no need for the rest of
+   Home Assistant).
+2. Download that backup to your computer from the same page. Home Assistant
+   decrypts it as it downloads, so you get a plain `.tar` file.
+3. In this app, go to **Settings → Snapshots & data → Import database or backup**
+   and pick that `.tar` file. The app finds `speciesid.db` inside it.
+
+A bare `speciesid.db` file works too, if you've copied one out some other way.
 
 Option names map across like this: `frigate.frigate_url` → `frigate_url`,
 `frigate.camera` → `cameras`, `frigate.main_topic` → `frigate_topic`,

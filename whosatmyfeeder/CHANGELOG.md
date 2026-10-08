@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- Import accepts a Home Assistant backup of the original add-on (the .tar from
+  Settings → System → Backups), so moving your history over needs no terminal.
+
 ## 2.0.1
 
 - Fix add-on install: the Supervisor rejected the base image in build.yaml and
