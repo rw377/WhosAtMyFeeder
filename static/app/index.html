@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Who's At My Feeder</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="#/today">
+    <span class="logo"><svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" d="M44 14c-5 0-9 4-9 9v2c-9-1-17 3-22 10l-7 2 6 3c4 8 12 12 21 12 13 0 22-9 22-21v-6l6-3-7-2c-2-4-6-6-10-6z"/></svg></span>
+    <span class="disp">Who's At My Feeder</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a href="#/today" data-nav="today">Today</a>
+    <a href="#/history" data-nav="history">History</a>
+    <a href="#/species" data-nav="species">Species</a>
+    <a href="#/stats" data-nav="stats">Stats</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
+  </nav>
+  <div class="top-right">
+    <form class="search" id="top-search" role="search">
+      <label class="vh" for="top-q">Search birds</label>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input class="field" id="top-q" type="search" placeholder="Search birds…" autocomplete="off">
+    </form>
+    <span class="pill status" id="status-pill"><span class="dot"></span><span id="status-text">connecting…</span></span>
+  </div>
+</header>
+<main id="main" tabindex="-1"></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="viewer" aria-label="Detection">
+  <div class="viewer-inner"></div>
+</dialog>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+build_from:
+  amd64: python:3.8-slim-bookworm
+  aarch64: python:3.8-slim-bookworm
+args:
+  WAMF_REPO: https://github.com/rw377/WhosAtMyFeeder
+  WAMF_REF: master
