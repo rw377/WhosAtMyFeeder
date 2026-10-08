@@ -31,16 +31,26 @@ has a copy-ready automation that sends a phone notification with the picture.
 
 ## Moving over from the original add-on
 
-The original add-on keeps its database inside its own container. To bring your
-history across:
+If you used the WhosAtMyFeeder add-on from
+[bertybuttface/addons](https://github.com/bertybuttface/addons), your history is in
+`/data/speciesid.db` inside that add-on's container. The database format is the
+same, so it imports directly:
 
-1. With the SSH add-on (protection mode off), copy the database out:
+1. Open a shell with the **Advanced SSH & Web Terminal** add-on (protection mode
+   off) and copy the database somewhere you can reach:
    `docker cp addon_932a64e5_whosatmyfeeder:/data/speciesid.db /share/speciesid.db`
-   (the database is normally at `/data/speciesid.db` inside the old container;
-   use your old add-on's slug, shown on its Info page as the hostname).
-2. Download `/share/speciesid.db` with the Samba add-on or File editor.
+   (`932a64e5_whosatmyfeeder` is the old add-on's slug; its Info page shows it as
+   the hostname with a dash instead of the underscore).
+2. Download `/share/speciesid.db` with the Samba share or File editor add-on.
 3. In this app, go to **Settings → Snapshots & data → Import database**.
 
-Imports merge, so it's safe to run the old and new add-ons side by side for a
-while and import again later. Pictures for old detections are pulled from
-Frigate the first time they're viewed, for as long as Frigate still has them.
+Option names map across like this: `frigate.frigate_url` → `frigate_url`,
+`frigate.camera` → `cameras`, `frigate.main_topic` → `frigate_topic`,
+`classification.threshold` → `threshold`. The MQTT settings can stay empty if you
+use the Mosquitto add-on; otherwise copy `mqtt_server`, `mqtt_username` and
+`mqtt_password` over.
+
+Imports merge, so you can run the old and new add-ons side by side for a while and
+import again before switching the old one off. Pictures for old detections are
+pulled from Frigate the first time they're viewed, for as long as Frigate still
+has them.
