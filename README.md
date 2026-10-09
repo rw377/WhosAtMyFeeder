@@ -1,7 +1,7 @@
 # Who's At My Feeder?
 ## Version 2.0
 
-WARNING/NOTE: This 2.0 fork is heavily vibe-coded, but working well for me. It was used to improve the interface and add MQTT alerting, as well as more customization and options. More details below. 
+WARNING/NOTE: This 2.0 fork of the original WhosAtMyFeeder project is heavily vibe-coded via Claude, but the underlying AI logic is the same and is working really well for me after thorough testing. The changes were done to improve the interface and add MQTT alerting, but has also added significant customizations, metrics, and alerting options. It has significant improvements in both usability and data provided. Further details and screenshots are below. 
 
 This fork adds a new interface and alerting on top of the original detector:
 
