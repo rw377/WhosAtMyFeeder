@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.4
+
+- Species page: "When it visits" and "Often seen with" now cover the year up to
+  the species' last visit instead of the last 90 days, so birds not seen lately
+  aren't blank.
+- "Often seen with" uses the time index (was a full pairwise scan) and says
+  how many visits it's based on.
+
 ## 2.0.3
 
 - Species pictures: use the best detection that still has a picture (cached

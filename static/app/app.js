@@ -642,12 +642,12 @@
         '<button class="btn" type="button" id="sp-hide">' + (s.prefs.hidden ? 'Unhide species' : 'Hide species') + '</button></div></div>' +
         '</div></section>';
 
-      var when = '<div class="card pad stack" style="flex:1 1 520px;min-width:0"><div><h2>When it visits</h2><p class="sub">Visits by hour of day, last 90 days</p></div>' +
+      var when = '<div class="card pad stack" style="flex:1 1 520px;min-width:0"><div><h2>When it visits</h2><p class="sub">Visits by hour of day, over the year up to its last visit</p></div>' +
         vbars(s.hours, { height: 180, tip: function (v, i) { return hourLabel(i) + ': ' + v + ' visits'; } }) + hourAxis() + '</div>';
-      var comp = '<div class="card pad stack" style="flex:1 1 320px"><div><h2>Often seen with</h2><p class="sub">Other species at the feeder within 10 minutes</p></div>' +
+      var comp = '<div class="card pad stack" style="flex:1 1 320px"><div><h2>Often seen with</h2><p class="sub">How often another species was at the feeder within 10 minutes of its visits (last ' + num(s.companion_visits) + ' visits)</p></div>' +
         (s.companions.length ? '<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px">' + s.companions.map(function (c) {
           return '<li style="display:flex;justify-content:space-between;gap:12px"><a href="' + speciesHref(c.scientific_name) + '" style="color:var(--ink);text-decoration:none">' + esc(c.common_name) + '</a><span class="mono" style="font-size:13px;color:var(--ink2)">' + c.pct + '%</span></li>';
-        }).join('') + '</ul>' : '<p class="muted">Usually comes alone.</p>') + '</div>';
+        }).join('') + '</ul>' : '<p class="muted">No other species seen within 10 minutes of its visits.</p>') + '</div>';
 
       var calMax = Math.max.apply(null, s.calendar.map(function (d) { return d.n; }).concat([1]));
       var cal = '<section class="card pad stack"><div class="sec-head"><div><h2>Season at a glance</h2><p class="sub">Each square is a day over the last six months; brighter means more visits</p></div></div>' +

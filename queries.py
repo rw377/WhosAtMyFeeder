@@ -263,10 +263,13 @@ def species_detail(conn, sci, now=None, have=frozenset(), gone=frozenset()):
         out.update({'hours': [0] * 24, 'calendar': [], 'companions': [], 'photos': [], 'best': None,
                     'rank': None, 'peak_hour': None})
         return out
-    since90 = (now - timedelta(days=90)).strftime('%Y-%m-%d %H:%M:%S')
+    # Window anchored on this species' own last sighting (a year of its visits), so
+    # birds not seen lately still get a visiting-hours chart and companions.
+    last_dt = _parse(base['last'])
+    since = (last_dt - timedelta(days=365)).strftime('%Y-%m-%d %H:%M:%S')
     hours = [0] * 24
     for r in conn.execute("""SELECT CAST(strftime('%H', detection_time) AS INTEGER) h, COUNT(*) n FROM detections
-                             WHERE display_name = ? AND detection_time >= ? GROUP BY h""", (sci, since90)):
+                             WHERE display_name = ? AND detection_time >= ? GROUP BY h""", (sci, since)):
         hours[r['h']] = r['n']
     out['hours'] = hours
     out['peak_hour'] = max(range(24), key=lambda h: hours[h]) if sum(hours) else None
@@ -293,18 +296,23 @@ def species_detail(conn, sci, now=None, have=frozenset(), gone=frozenset()):
     out['photos'] = [det_dict(r) for r in conn.execute(
         "SELECT %s FROM detections d %s WHERE d.display_name = ? ORDER BY d.detection_time DESC LIMIT 12"
         % (DET_COLUMNS, NAMES_JOIN), (sci,))]
-    # Other species at the feeder within 10 minutes of this one (last 90 days).
+    # Other species at the feeder within 10 minutes of this one, over its most recent
+    # visits. A range on detection_time lets SQLite use the time index.
     comp = conn.execute("""
-        WITH mine AS (SELECT detection_time t FROM detections WHERE display_name = ? AND detection_time >= ?)
+        WITH mine AS (SELECT detection_time t FROM detections WHERE display_name = ? AND detection_time >= ?
+                      ORDER BY detection_time DESC LIMIT 2000)
         SELECT d.display_name, %s AS common_name, COUNT(DISTINCT mine.t) AS overlap
         FROM mine JOIN detections d
-          ON d.display_name != ? AND ABS(julianday(d.detection_time) - julianday(mine.t)) <= 10.0 / 1440
+          ON d.detection_time BETWEEN datetime(mine.t, '-10 minutes') AND datetime(mine.t, '+10 minutes')
+         AND d.display_name != ?
         %s WHERE %s
         GROUP BY d.display_name ORDER BY overlap DESC LIMIT 5
-    """ % (COMMON, NAMES_JOIN, VISIBLE), (sci, since90, sci)).fetchall()
-    n90 = sum(hours) or 1
+    """ % (COMMON, NAMES_JOIN, VISIBLE), (sci, since, sci)).fetchall()
+    n_mine = conn.execute("""SELECT COUNT(*) FROM (SELECT 1 FROM detections WHERE display_name = ? AND detection_time >= ?
+                             LIMIT 2000)""", (sci, since)).fetchone()[0] or 1
     out['companions'] = [{'scientific_name': r['display_name'], 'common_name': r['common_name'],
-                          'pct': round(100 * r['overlap'] / n90)} for r in comp]
+                          'pct': max(1, round(100 * r['overlap'] / n_mine))} for r in comp]
+    out['companion_visits'] = n_mine
     rank_rows = conn.execute("SELECT display_name FROM detections d WHERE %s GROUP BY display_name ORDER BY COUNT(*) DESC"
                              % VISIBLE).fetchall()
     names = [r[0] for r in rank_rows]
