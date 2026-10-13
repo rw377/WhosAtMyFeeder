@@ -146,7 +146,9 @@ def api_status():
             'mqtt': rt.get('mqtt', {'connected': False}),
             'broker': '%s:%s' % (f.get('mqtt_server'), notifier.mqtt_port(cfg)),
             'frigate_url': f.get('frigate_url'),
-            'cameras': cams if isinstance(cams, list) else [cams],
+            'cameras': db.effective_cameras(cfg),
+            'config_cameras': cams if isinstance(cams, list) else [cams],
+            'frigate_ui': frigate.frigate_ui_link(f.get('frigate_url') or ''),
             'threshold': base_threshold(),
             'config_threshold': float(cfg['classification']['threshold']),
             'cache': frigate.cache_usage(),
@@ -157,6 +159,45 @@ def api_status():
         })
     finally:
         conn.close()
+
+
+@app.route('/api/cameras')
+def api_cameras():
+    """Frigate's cameras merged with what this app is watching and has seen."""
+    cams, error = frigate.list_cameras(frigate_url())
+    settings = db.get_settings()
+    watched = set(db.effective_cameras(config(), settings))
+    conn = db.connect()
+    try:
+        counts = {r[0]: (r[1], r[2]) for r in conn.execute(
+            "SELECT camera_name, COUNT(*), MAX(substr(detection_time, 1, 19)) FROM detections GROUP BY camera_name")}
+        ignored = db.get_runtime(conn).get('ignored_cameras') or {}
+    finally:
+        conn.close()
+    names = {c['name'] for c in cams}
+    for name in sorted((watched | set(counts)) - names):  # watched or seen, but not in Frigate (renamed/removed)
+        cams.append({'name': name, 'enabled': None, 'tracks_bird': None, 'snapshots': None, 'missing': True})
+    for c in cams:
+        n, last = counts.get(c['name'], (0, None))
+        c.update(watched=c['name'] in watched, detections=n,
+                 last_detection=last.replace(' ', 'T') if last else None,
+                 ignored_events=(ignored.get(c['name']) or {}).get('count', 0))
+    return jsonify({'cameras': cams, 'error': error, 'selected': settings['cameras']['selected'],
+                    'config_cameras': (config()['frigate'].get('camera') or [])})
+
+
+@app.route('/live/<camera>.jpg')
+def live_frame(camera):
+    if not frigate.valid_camera(camera):
+        abort(404)
+    try:
+        h = max(120, min(1080, int(request.args.get('h', 720))))
+    except ValueError:
+        h = 720
+    data = frigate.latest_frame(frigate_url(), camera, h)
+    if data is None:
+        abort(404)
+    return Response(data, mimetype='image/jpeg', headers={'Cache-Control': 'no-store'})
 
 
 @app.route('/api/today')
@@ -352,6 +393,13 @@ def _clean_settings(patch):
                 v = bool(v)
             elif isinstance(default, int) and not isinstance(default, bool):
                 v = max(0, int(v))
+            elif section == 'cameras' and k == 'selected':
+                if v in (None, '', []):
+                    v = None
+                elif isinstance(v, list) and all(isinstance(c, str) and frigate.valid_camera(c) for c in v):
+                    v = sorted(set(v))
+                else:
+                    abort(400, 'invalid camera list')
             elif k in ('min_score', 'threshold', 'review_below'):
                 v = None if v in (None, '') else min(1.0, max(0.0, float(v)))
             elif isinstance(default, str):

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0
+
+- **Settings → Cameras**: lists every camera Frigate has, with a live thumbnail,
+  whether it tracks birds and has snapshots on, and detection counts. Tick the
+  ones to watch; this overrides the add-on's `cameras` option and applies
+  without a restart.
+- **Live view**: click the camera status in the top right (or "Live view" on the
+  Cameras page) for a live picture from Frigate, refreshed every second, with a
+  camera switcher and an "Open Frigate" button.
+- Help text for every option on the add-on's Configuration tab.
+- The skipped-camera warning clears once that camera is being watched.
+
 ## 2.0.5
 
 - Bird events from a camera that isn't in the `cameras` option are no longer

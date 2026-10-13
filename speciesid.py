@@ -68,9 +68,8 @@ def on_message(client, userdata, message):
 _ignored_logged = set()
 
 
-def watched_cameras():
-    cameras = config['frigate']['camera'] or []
-    return [cameras] if isinstance(cameras, str) else list(cameras)
+def watched_cameras(settings=None):
+    return db.effective_cameras(config, settings)
 
 
 def handle_event(payload_dict):
@@ -86,7 +85,7 @@ def handle_event(payload_dict):
         if cam not in _ignored_logged:
             _ignored_logged.add(cam)
             print("Bird event from camera %r ignored: not in the cameras list %r. "
-                  "Add it to the add-on's 'cameras' option to process it." % (cam, cameras), flush=True)
+                  "Add it under Settings > Cameras in the app to process it." % (cam, cameras), flush=True)
         ignored = db.get_runtime().get('ignored_cameras') or {}
         entry = ignored.get(cam) or {'count': 0}
         entry.update(count=entry['count'] + 1, last=now_s)
@@ -94,6 +93,10 @@ def handle_event(payload_dict):
         db.set_runtime('ignored_cameras', ignored)
         return
     db.set_runtime('last_bird_event', {'camera': cam, 'time': now_s})
+    ignored = db.get_runtime().get('ignored_cameras') or {}
+    if cam in ignored:
+        ignored.pop(cam)
+        db.set_runtime('ignored_cameras', ignored)
 
     frigate_event = after_data['id']
     frigate_url = config['frigate']['frigate_url']

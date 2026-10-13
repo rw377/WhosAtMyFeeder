@@ -134,6 +134,7 @@
     });
   }
   setInterval(loadStatus, 30000);
+  document.getElementById('status-pill').addEventListener('click', function () { openLive(); });
 
   document.getElementById('top-search').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -147,12 +148,12 @@
       return '<div class="flagbox" role="alert" style="margin:0">Bird detection isn’t running: the classifier failed to load (' +
         esc(status.detector_error) + '). History, settings and import still work. Check the add-on log.</div>';
     }
-    var ign = Object.keys(status.ignored_cameras || {});
+    var ign = Object.keys(status.ignored_cameras || {}).filter(function (c) { return status.cameras.indexOf(c) < 0; });
     if (ign.length) {
       return '<div class="flagbox" role="alert" style="margin:0">Frigate is sending bird events from ' +
         ign.map(function (c) { var e = status.ignored_cameras[c]; return '<b class="mono">' + esc(c) + '</b> (' + num(e.count) + ', last ' + esc(fmtShort(e.last)) + ')'; }).join(', ') +
         ', but ' + (ign.length > 1 ? 'those cameras aren’t' : 'that camera isn’t') + ' in your cameras list (<span class="mono">' + esc(status.cameras.join(', ') || 'empty') +
-        '</span>), so the events are being skipped. Add ' + (ign.length > 1 ? 'them' : 'it') + ' to the add-on’s <b>cameras</b> option and restart.</div>';
+        '</span>), so the events are being skipped. <a href="#/settings/cameras">Choose cameras in Settings → Cameras</a>.</div>';
     }
     return '';
   }
@@ -288,6 +289,72 @@
         .then(function () { toast('Changed to ' + chosen.common_name); closeViewer(); render(true); }).catch(fail);
     };
     input.focus();
+  }
+
+  /* ------------------------------------------------------------------ live view */
+
+  var liveTimer = null;
+  function stopLive() { if (liveTimer) { clearTimeout(liveTimer); liveTimer = null; } }
+  viewer.addEventListener('close', stopLive);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) stopLive(); });
+
+  function frigateLink() {
+    var f = status && status.frigate_ui;
+    if (!f || !f.url) return '';
+    return '<a class="btn" href="' + esc(f.url) + '" target="' + (f.ingress ? '_top' : '_blank') + '" rel="noopener">Open Frigate</a>';
+  }
+
+  var liveCams = null;  // Frigate's cameras, fetched the first time the live view opens
+
+  function openLive(cam) {
+    if (!liveCams) {
+      return api('cameras').then(function (d) {
+        liveCams = d.cameras.filter(function (c) { return !c.missing && c.enabled !== false; });
+        openLive(cam);
+      }).catch(function () { liveCams = []; openLive(cam); });
+    }
+    // Default: a watched camera Frigate has, else one tracking birds, else any.
+    var pick = liveCams.filter(function (c) { return c.watched; })[0] ||
+      liveCams.filter(function (c) { return c.tracks_bird; })[0] || liveCams[0];
+    cam = cam || (pick && pick.name);
+    var names = liveCams.map(function (c) { return c.name; });
+    var inner = viewer.querySelector('.viewer-inner');
+    if (!cam) {
+      inner.innerHTML = '<div class="viewer-body"><div><h2>No cameras found</h2><p class="muted">Frigate didn’t report any enabled cameras. Check the Frigate URL in the add-on configuration.</p></div>' +
+        '<div style="display:flex;gap:8px">' + frigateLink() + '<button class="btn icon" type="button" aria-label="Close" data-vclose="1">' + ICON.x + '</button></div></div>';
+    } else {
+      inner.innerHTML =
+        '<div class="live-media"><img id="live-img" alt="Live view of ' + esc(cam) + '"><span class="live-badge"><span class="dot"></span>LIVE · ' + esc(cam) + '</span></div>' +
+        '<div class="viewer-body"><div><h2>' + esc(cam) + '</h2><p class="muted" style="margin:4px 0 0;font-size:14px" id="live-note">Latest frame from Frigate, refreshed every second.</p></div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        (names.length > 1 ? '<label style="display:flex"><span class="vh">Camera</span><select class="field" id="live-cam">' + names.map(function (c) {
+          return '<option' + (c === cam ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></label>' : '') +
+        frigateLink() +
+        '<button class="btn icon" type="button" aria-label="Close" data-vclose="1">' + ICON.x + '</button></div></div>';
+    }
+    inner.onclick = function (e) { if (e.target.closest('[data-vclose]')) closeViewer(); };
+    if (!viewer.open) viewer.showModal();
+    stopLive();
+    if (!cam) return;
+    var sel = document.getElementById('live-cam');
+    if (sel) sel.onchange = function () { openLive(sel.value); };
+    var imgEl = document.getElementById('live-img'), fails = 0;
+    var h = Math.min(1080, Math.round((viewer.clientWidth || 960) * (window.devicePixelRatio || 1) * 9 / 16));
+    function tick() {
+      if (!viewer.open || document.hidden) return;
+      var next = new Image();
+      next.onload = function () {
+        imgEl.src = next.src; fails = 0;
+        liveTimer = setTimeout(tick, 1000);
+      };
+      next.onerror = function () {
+        fails++;
+        if (fails === 3) document.getElementById('live-note').textContent = 'Can’t reach this camera through Frigate right now; retrying.';
+        liveTimer = setTimeout(tick, 3000);
+      };
+      next.src = 'live/' + enc(cam) + '.jpg?h=' + h + '&t=' + Date.now();
+    }
+    tick();
   }
 
   /* ------------------------------------------------------------------ autocomplete */
@@ -785,18 +852,18 @@
 
   /* ================================================================== SETTINGS */
 
-  var SECTIONS = [['notifications', 'Notifications'], ['detection', 'Detection & thresholds'], ['storage', 'Snapshots & data'], ['about', 'About']];
+  var SECTIONS = [['notifications', 'Notifications'], ['cameras', 'Cameras'], ['detection', 'Detection & thresholds'], ['storage', 'Snapshots & data'], ['about', 'About']];
 
   routes.settings = function (r) {
     var section = r.arg || 'notifications';
     return Promise.all([api('settings'), section === 'notifications' ? api('watchlist') : [], section === 'notifications' ? api('alerts/recent') : [],
-      section === 'detection' ? api('species') : []]).then(function (res) {
+      section === 'detection' ? api('species') : [], section === 'cameras' ? api('cameras') : null]).then(function (res) {
       var st = res[0];
-      routes.settings.state = { settings: st, watch: res[1], species: res[3] };
+      routes.settings.state = { settings: st, watch: res[1], species: res[3], cameras: res[4] };
       var side = '<nav class="side" aria-label="Settings sections">' + SECTIONS.map(function (x) {
         return '<a href="#/settings/' + x[0] + '"' + (x[0] === section ? ' aria-current="page"' : '') + '>' + x[1] + '</a>';
       }).join('') + '</nav>';
-      var body = ({ notifications: settingsNotifications, detection: settingsDetection, storage: settingsStorage, about: settingsAbout }[section] || settingsNotifications)(st, res);
+      var body = ({ notifications: settingsNotifications, cameras: settingsCameras, detection: settingsDetection, storage: settingsStorage, about: settingsAbout }[section] || settingsNotifications)(st, res);
       var title = (SECTIONS.filter(function (x) { return x[0] === section; })[0] || SECTIONS[0])[1];
       return '<section class="head"><div><div class="label">Settings</div><h1>' + esc(title) + '</h1></div></section>' +
         '<div class="settings">' + side + '<div class="set-main" id="set-main">' + body + '</div></div>';
@@ -898,6 +965,42 @@
       recent.map(function (x) { return '<li style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>' + esc(x.common_name) + ' <span class="muted">(' + esc(x.reason.replace(/_/g, ' ').replace(/,/g, ', ')) + ')</span></span><span class="mono muted">' + esc(fmtShort(x.sent_at)) + '</span></li>'; }).join('') +
       '</ul></section>' : '';
     return conn + all + alerts + quiet + sent + log;
+  }
+
+  function settingsCameras(st, res) {
+    var data = res[4] || { cameras: [] };
+    var usingApp = Array.isArray(data.selected) && data.selected.length;
+    var rows = data.cameras.map(function (c, i) {
+      var tags = [];
+      if (c.missing) tags.push('<span class="pill lo">not in Frigate</span>');
+      else {
+        tags.push(c.tracks_bird ? '<span class="pill ok">tracks birds</span>' : '<span class="pill lo">not tracking “bird”</span>');
+        if (c.snapshots === false) tags.push('<span class="pill lo">snapshots off</span>');
+        if (c.enabled === false) tags.push('<span class="pill line">disabled</span>');
+      }
+      if (c.ignored_events && !c.watched) tags.push('<span class="pill lo">' + num(c.ignored_events) + ' bird events skipped</span>');
+      return '<div class="cam-row"><label class="chk" style="min-height:44px"><input type="checkbox" data-cam="' + esc(c.name) + '"' + (c.watched ? ' checked' : '') + '>' +
+        '<span class="vh">Watch ' + esc(c.name) + '</span></label>' +
+        (c.missing ? '<span class="ph">' + bird(28) + '</span>' :
+          '<button type="button" class="ph" data-live="' + esc(c.name) + '" aria-label="Live view of ' + esc(c.name) + '">' + bird(28) +
+          '<img loading="lazy" src="live/' + enc(c.name) + '.jpg?h=144" alt="" onerror="this.remove()"></button>') +
+        '<div class="info"><div class="mono" style="font-weight:500;color:var(--ink)">' + esc(c.name) + '</div>' +
+        '<div class="muted" style="font-size:13px;margin-top:2px">' + (c.detections ? num(c.detections) + ' detections · last ' + esc(fmtShort(c.last_detection)) : 'no detections yet') + '</div>' +
+        '<div class="tagline">' + tags.join('') + '</div></div>' +
+        (c.missing ? '' : '<button class="btn" type="button" data-live="' + esc(c.name) + '">Live view</button>') + '</div>';
+    }).join('');
+    return '<section class="card stack" style="padding:22px 0 8px"><div style="padding:0 24px"><h2>Cameras to watch</h2>' +
+      '<p class="sub">These are the cameras Frigate reports. Bird events from checked cameras are identified and recorded; others are skipped. ' +
+      'A camera needs Frigate to track the <span class="mono">bird</span> object, with snapshots on.</p></div>' +
+      (data.error ? '<div class="flagbox" style="margin:0 24px">' + esc(data.error) + '</div>' : '') +
+      (rows || '<p class="muted" style="padding:0 24px">Frigate didn’t report any cameras.</p>') +
+      '<div class="inline" style="padding:12px 24px 10px;border-top:1px solid var(--line3)">' +
+      '<button class="btn primary" type="button" id="cam-save" disabled>Save</button>' +
+      (usingApp ? '<button class="btn ghost" type="button" id="cam-reset">Use the add-on option instead (' + esc((data.config_cameras || []).join(', ') || 'none') + ')</button>' : '') +
+      '<span id="cam-msg" class="muted"></span></div></section>' +
+      '<p class="sub" style="margin:0">' + (usingApp
+        ? 'This selection overrides the add-on’s <span class="mono">cameras</span> option. Changes apply to the next bird event; no restart needed.'
+        : 'Currently using the add-on’s <span class="mono">cameras</span> option (' + esc((data.config_cameras || []).join(', ') || 'none') + '). Saving here overrides it, no restart needed.') + '</p>';
   }
 
   function settingsDetection(st, res) {
@@ -1021,6 +1124,21 @@
           });
         });
       });
+    }
+    if (section === 'cameras') {
+      var saveBtn = document.getElementById('cam-save'), msg = document.getElementById('cam-msg');
+      var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-cam]'));
+      boxes.forEach(function (b) { b.addEventListener('change', function () { saveBtn.disabled = false; msg.textContent = ''; }); });
+      saveBtn.addEventListener('click', function () {
+        var sel = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.dataset.cam; });
+        if (!sel.length) { msg.className = 'errmsg'; msg.textContent = 'Pick at least one camera.'; return; }
+        save({ cameras: { selected: sel } }, true).then(function () { toast('Cameras saved'); liveCams = null; return loadStatus(); }).then(function () { render(true); });
+      });
+      var reset = document.getElementById('cam-reset');
+      if (reset) reset.addEventListener('click', function () {
+        save({ cameras: { selected: null } }, true).then(function () { toast('Using the add-on option'); liveCams = null; return loadStatus(); }).then(function () { render(true); });
+      });
+      document.querySelectorAll('[data-live]').forEach(function (b) { b.addEventListener('click', function () { openLive(b.dataset.live); }); });
     }
     if (section === 'detection') {
       onChange('d-thr', function (el) { save({ detection: { threshold: numOrNull(el.value) } }).then(loadStatus); });

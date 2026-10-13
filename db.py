@@ -52,7 +52,21 @@ SETTINGS_DEFAULTS = {
     'ui': {
         'group_minutes': 10,
     },
+    'cameras': {
+        'selected': None,          # list of Frigate camera names; None = use config.yml / add-on option
+    },
 }
+
+
+def effective_cameras(config, settings=None):
+    """Cameras to process: the in-app selection if one is saved, otherwise the
+    config / add-on option."""
+    settings = settings or get_settings()
+    sel = settings.get('cameras', {}).get('selected')
+    if isinstance(sel, list) and sel:
+        return list(sel)
+    cams = config['frigate'].get('camera') or []
+    return [cams] if isinstance(cams, str) else list(cams)
 
 _local = threading.local()
 
