@@ -862,7 +862,7 @@
       routes.settings.state = { settings: st, watch: res[1], species: res[3], cameras: res[4] };
       var side = '<nav class="side" aria-label="Settings sections">' + SECTIONS.map(function (x) {
         return '<a href="#/settings/' + x[0] + '"' + (x[0] === section ? ' aria-current="page"' : '') + '>' + x[1] + '</a>';
-      }).join('') + '</nav>';
+      }).join('') + '<p class="mono muted" style="font-size:12px;padding:12px 14px 0;margin:0">v' + esc(status.version) + '</p></nav>';
       var body = ({ notifications: settingsNotifications, cameras: settingsCameras, detection: settingsDetection, storage: settingsStorage, about: settingsAbout }[section] || settingsNotifications)(st, res);
       var title = (SECTIONS.filter(function (x) { return x[0] === section; })[0] || SECTIONS[0])[1];
       return '<section class="head"><div><div class="label">Settings</div><h1>' + esc(title) + '</h1></div></section>' +

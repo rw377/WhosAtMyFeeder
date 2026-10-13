@@ -17,7 +17,7 @@ import frigate
 import notifier
 import queries
 
-VERSION = '2.0.0'
+VERSION = os.environ.get('WAMF_VERSION', 'dev')
 APP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'app')
 
 app = Flask(__name__, static_folder=None)
@@ -68,14 +68,45 @@ def _headers(resp):
 
 # ------------------------------------------------------------------ app shell
 
+_index_html = None
+
+
+def _render_index():
+    """index.html with asset URLs stamped by content hash, so an update can't leave
+    a browser running the previous app.js / app.css from its cache."""
+    import hashlib
+    import re as _re
+    with open(os.path.join(APP_DIR, 'index.html'), encoding='utf-8') as f:
+        html = f.read()
+
+    def stamp(m):
+        name = m.group(1)
+        try:
+            with open(os.path.join(APP_DIR, name), 'rb') as af:
+                digest = hashlib.sha256(af.read()).hexdigest()[:12]
+        except OSError:
+            return m.group(0)
+        return 'assets/%s?v=%s' % (name, digest)
+    return _re.sub(r'assets/([A-Za-z0-9_.-]+\.(?:js|css|svg))', stamp, html)
+
+
 @app.route('/')
 def index():
-    return send_from_directory(APP_DIR, 'index.html')
+    global _index_html
+    if _index_html is None:
+        _index_html = _render_index()
+    return Response(_index_html, mimetype='text/html',
+                    headers={'Cache-Control': 'no-cache, must-revalidate'})
 
 
 @app.route('/assets/<path:name>')
 def assets(name):
-    return send_from_directory(APP_DIR, name, max_age=3600)
+    # URLs from index.html carry a content hash, so they can be cached for long;
+    # anything requested without one must be revalidated.
+    resp = send_from_directory(APP_DIR, name, max_age=31536000 if request.args.get('v') else 0)
+    if not request.args.get('v'):
+        resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 # ------------------------------------------------------------------ pictures and clips
