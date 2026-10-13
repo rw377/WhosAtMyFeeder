@@ -152,6 +152,8 @@ def api_status():
             'cache': frigate.cache_usage(),
             'last_detection': rt.get('last_detection'),
             'detector_error': rt.get('detector_error'),
+            'ignored_cameras': rt.get('ignored_cameras') or {},
+            'last_bird_event': rt.get('last_bird_event'),
         })
     finally:
         conn.close()
