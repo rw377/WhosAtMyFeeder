@@ -141,6 +141,22 @@
     setHash('/history', { q: q });
   });
 
+  function statusBanner() {
+    if (!status) return '';
+    if (status.detector_error) {
+      return '<div class="flagbox" role="alert" style="margin:0">Bird detection isn’t running: the classifier failed to load (' +
+        esc(status.detector_error) + '). History, settings and import still work. Check the add-on log.</div>';
+    }
+    var ign = Object.keys(status.ignored_cameras || {});
+    if (ign.length) {
+      return '<div class="flagbox" role="alert" style="margin:0">Frigate is sending bird events from ' +
+        ign.map(function (c) { var e = status.ignored_cameras[c]; return '<b class="mono">' + esc(c) + '</b> (' + num(e.count) + ', last ' + esc(fmtShort(e.last)) + ')'; }).join(', ') +
+        ', but ' + (ign.length > 1 ? 'those cameras aren’t' : 'that camera isn’t') + ' in your cameras list (<span class="mono">' + esc(status.cameras.join(', ') || 'empty') +
+        '</span>), so the events are being skipped. Add ' + (ign.length > 1 ? 'them' : 'it') + ' to the add-on’s <b>cameras</b> option and restart.</div>';
+    }
+    return '';
+  }
+
   /* ------------------------------------------------------------------ router */
 
   var routes = {};
@@ -176,9 +192,7 @@
       return view(r, token);
     }).then(function (html) {
       if (token !== renderToken || html === undefined) return;
-      main.innerHTML = (status && status.detector_error
-        ? '<div class="flagbox" role="alert" style="margin:0">Bird detection isn’t running: the classifier failed to load (' + esc(status.detector_error) + '). History, settings and import still work. Check the add-on log.</div>'
-        : '') + html;
+      main.innerHTML = statusBanner() + html;
       main.classList.remove('loading');
       if (view.after) view.after(r);
       if (!samePage && !keepScroll) { window.scrollTo(0, 0); }

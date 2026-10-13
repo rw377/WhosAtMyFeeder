@@ -42,7 +42,7 @@ def on_connect(client, userdata, flags, rc):
         db.set_runtime('mqtt', {'connected': False, 'error': 'connection refused (code %s)' % rc,
                                 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
         return
-    print("MQTT Connected", flush=True)
+    print("MQTT Connected; watching bird events from cameras: %s" % ', '.join(watched_cameras()), flush=True)
     client.subscribe(config['frigate']['main_topic'] + "/events")
     db.set_runtime('mqtt', {'connected': True, 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
     notifier.on_connect(db.get_settings())
@@ -65,13 +65,35 @@ def on_message(client, userdata, message):
         print("Error handling event: %r" % e, flush=True)
 
 
+_ignored_logged = set()
+
+
+def watched_cameras():
+    cameras = config['frigate']['camera'] or []
+    return [cameras] if isinstance(cameras, str) else list(cameras)
+
+
 def handle_event(payload_dict):
     after_data = payload_dict.get('after', {})
-    cameras = config['frigate']['camera']
-    if isinstance(cameras, str):
-        cameras = [cameras]
-    if after_data.get('camera') not in cameras or after_data.get('label') != 'bird':
+    if after_data.get('label') != 'bird':
         return
+    cam = after_data.get('camera')
+    cameras = watched_cameras()
+    now_s = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    if cam not in cameras:
+        # Say so instead of dropping the event silently: a camera-name typo in the
+        # config otherwise looks exactly like "no birds".
+        if cam not in _ignored_logged:
+            _ignored_logged.add(cam)
+            print("Bird event from camera %r ignored: not in the cameras list %r. "
+                  "Add it to the add-on's 'cameras' option to process it." % (cam, cameras), flush=True)
+        ignored = db.get_runtime().get('ignored_cameras') or {}
+        entry = ignored.get(cam) or {'count': 0}
+        entry.update(count=entry['count'] + 1, last=now_s)
+        ignored[cam] = entry
+        db.set_runtime('ignored_cameras', ignored)
+        return
+    db.set_runtime('last_bird_event', {'camera': cam, 'time': now_s})
 
     frigate_event = after_data['id']
     frigate_url = config['frigate']['frigate_url']
@@ -203,6 +225,7 @@ def main():
         options = vision.ImageClassifierOptions(base_options=base_options, classification_options=classification_options)
         classifier = vision.ImageClassifier.create_from_options(options)
         db.set_runtime('detector_error', None)
+        db.set_runtime('ignored_cameras', {})
         db.set_runtime('mqtt', {'connected': False, 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
     except Exception as e:
         print("Bird classifier failed to load, detection is OFF: %r" % e, flush=True)

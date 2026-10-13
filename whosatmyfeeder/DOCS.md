@@ -14,7 +14,7 @@ history, per-species pages, stats, and MQTT alerts for the birds you care about.
 | Option | What it does |
 | --- | --- |
 | `frigate_url` | Where Frigate's API is. For the Frigate add-on this is usually `http://ccab4aaf-frigate:5000`. |
-| `cameras` | Frigate camera names to watch for birds. |
+| `cameras` | Frigate camera names to watch for birds, spelled exactly as in your Frigate config (for example `bird_cam`). |
 | `frigate_topic` | Frigate's MQTT topic prefix (default `frigate`). |
 | `threshold` | Minimum classifier confidence to record a detection. Can be overridden in the app. |
 | `mqtt_server`, `mqtt_port`, `mqtt_username`, `mqtt_password` | Only needed if you don't use the Mosquitto add-on. |

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.5
+
+- Bird events from a camera that isn't in the `cameras` option are no longer
+  dropped silently: the log names the camera, and the app shows a banner saying
+  which camera to add. The startup log lists the cameras being watched.
+
 ## 2.0.4
 
 - Species page: "When it visits" and "Often seen with" now cover the year up to
