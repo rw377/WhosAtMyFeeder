@@ -18,6 +18,7 @@ RUN apt-get update \
     && apt-get purge -y git && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* /app/.git
 
+ENV WAMF_VERSION=${BUILD_VERSION}
 COPY run.py /run.py
 WORKDIR /app
 CMD ["python", "/run.py"]

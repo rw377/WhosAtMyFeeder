@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1
+
+- Fix: after an update, browsers could keep running the previous version's
+  app.js/app.css from cache for up to an hour, so new features (the Cameras
+  page, the live view) didn't appear. Asset URLs now change with every release
+  and the page itself is never cached.
+
 ## 2.1.0
 
 - **Settings → Cameras**: lists every camera Frigate has, with a live thumbnail,
