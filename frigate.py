@@ -143,3 +143,57 @@ def set_sublabel(frigate_url, event_id, sublabel):
     except requests.RequestException as e:
         print('Failed to set sublabel: %s' % e, flush=True)
         return False
+
+
+CAMERA_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+
+def valid_camera(name):
+    return bool(name) and CAMERA_RE.match(name) is not None
+
+
+def list_cameras(frigate_url):
+    """Cameras defined in Frigate, with whether each one tracks birds.
+    Returns (cameras, error)."""
+    try:
+        r = requests.get('%s/api/config' % frigate_url.rstrip('/'), timeout=TIMEOUT)
+        r.raise_for_status()
+        cfg = r.json()
+    except (requests.RequestException, ValueError) as e:
+        return [], 'Could not read cameras from Frigate at %s: %s' % (frigate_url, e)
+    global_track = ((cfg.get('objects') or {}).get('track')) or ['person']
+    out = []
+    for name, cam in sorted((cfg.get('cameras') or {}).items()):
+        track = ((cam.get('objects') or {}).get('track')) or global_track
+        out.append({
+            'name': name,
+            'enabled': cam.get('enabled', True) is not False,
+            'tracks_bird': 'bird' in track,
+            'snapshots': bool((cam.get('snapshots') or {}).get('enabled', (cfg.get('snapshots') or {}).get('enabled'))),
+        })
+    return out, None
+
+
+def latest_frame(frigate_url, camera, height=720):
+    """Current frame from a Frigate camera as JPEG bytes, or None."""
+    if not valid_camera(camera):
+        return None
+    try:
+        r = requests.get('%s/api/%s/latest.jpg' % (frigate_url.rstrip('/'), camera),
+                         params={'h': int(height), 'quality': 80}, timeout=TIMEOUT)
+        if r.status_code == 200 and r.headers.get('Content-Type', '').startswith('image/'):
+            return r.content
+    except requests.RequestException as e:
+        print('Frigate live frame failed for %s: %s' % (camera, e), flush=True)
+    return None
+
+
+def frigate_ui_link(frigate_url):
+    """Where the browser can open Frigate's own UI. Inside Home Assistant, Frigate's
+    add-on host name (e.g. ccab4aaf-frigate) maps to its ingress path."""
+    from urllib.parse import urlparse
+    host = urlparse(frigate_url).hostname or ''
+    m = re.match(r'^([0-9a-f]{8})-(frigate[a-z0-9_-]*)$', host)
+    if m:
+        return {'url': '/hassio/ingress/%s_%s' % (m.group(1), m.group(2).replace('-', '_')), 'ingress': True}
+    return {'url': frigate_url, 'ingress': False}

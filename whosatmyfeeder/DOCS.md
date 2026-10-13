@@ -14,12 +14,12 @@ history, per-species pages, stats, and MQTT alerts for the birds you care about.
 | Option | What it does |
 | --- | --- |
 | `frigate_url` | Where Frigate's API is. For the Frigate add-on this is usually `http://ccab4aaf-frigate:5000`. |
-| `cameras` | Frigate camera names to watch for birds, spelled exactly as in your Frigate config (for example `bird_cam`). |
+| `cameras` | Frigate camera names to watch for birds, spelled exactly as in your Frigate config (for example `bird_cam`). Easier: pick them from the list in the app under **Settings → Cameras**, which overrides this option. |
 | `frigate_topic` | Frigate's MQTT topic prefix (default `frigate`). |
 | `threshold` | Minimum classifier confidence to record a detection. Can be overridden in the app. |
 | `mqtt_server`, `mqtt_port`, `mqtt_username`, `mqtt_password` | Only needed if you don't use the Mosquitto add-on. |
 
-Open the app from the sidebar (**Feeder**). Everything else (alerts, quiet hours,
+Open the app from the sidebar (**Feeder**). Click the camera status in the top right for a live view. Everything else (alerts, quiet hours,
 review flags, hidden species) is set in the app under **Settings**.
 
 ## Alerts in Home Assistant

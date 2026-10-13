@@ -1,0 +1,32 @@
+configuration:
+  frigate_url:
+    name: Frigate URL
+    description: >-
+      Where Frigate's API is. For the Frigate add-on this is usually
+      http://ccab4aaf-frigate:5000.
+  cameras:
+    name: Cameras
+    description: >-
+      Frigate camera names to watch, spelled exactly as in Frigate (e.g. bird_cam).
+      Easier: open the app and pick from the list under Settings → Cameras, which
+      overrides this.
+  frigate_topic:
+    name: Frigate MQTT topic
+    description: Frigate's MQTT topic prefix (usually "frigate").
+  threshold:
+    name: Detection threshold
+    description: >-
+      Minimum classifier confidence (0.1–0.99) to record a detection. Can be
+      changed in the app under Settings → Detection & thresholds.
+  mqtt_server:
+    name: MQTT server
+    description: Leave empty to use the Mosquitto broker add-on automatically.
+  mqtt_port:
+    name: MQTT port
+    description: Leave empty for 1883.
+  mqtt_username:
+    name: MQTT username
+    description: Leave empty when using the Mosquitto broker add-on.
+  mqtt_password:
+    name: MQTT password
+    description: Leave empty when using the Mosquitto broker add-on.
