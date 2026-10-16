@@ -123,7 +123,7 @@ class Notifier(object):
             'homeassistant/sensor/whosatmyfeeder/current_bird/config': dict(avail, **{
                 'name': 'Bird at feeder', 'unique_id': 'whosatmyfeeder_current_bird',
                 'object_id': 'whosatmyfeeder_current_bird', 'state_topic': prefix + '/current',
-                'value_template': "{{ value_json.common_name if value_json.present else 'None' }}",
+                'value_template': '{{ value_json.common_name }}',
                 'json_attributes_topic': prefix + '/current', 'icon': 'mdi:bird', 'device': device}),
             'homeassistant/binary_sensor/whosatmyfeeder/bird_present/config': dict(avail, **{
                 'name': 'Bird present', 'unique_id': 'whosatmyfeeder_bird_present',

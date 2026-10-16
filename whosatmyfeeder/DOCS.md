@@ -29,7 +29,7 @@ with these entities:
 
 | Entity | What it shows |
 | --- | --- |
-| `sensor.whosatmyfeeder_current_bird` (**Bird at feeder**) | The species at the feeder right now, `Unknown bird` while it's still being identified, or `None`. |
+| `sensor.whosatmyfeeder_current_bird` (**Bird at feeder**) | The species at the feeder right now; `Unknown bird` when a bird is there but hasn't been identified; `No bird` when the feeder is empty. The `status` attribute is `identified`, `unidentified` or `none`. |
 | `binary_sensor.whosatmyfeeder_bird_present` (**Bird present**) | On while any bird is at the feeder. |
 | `sensor.whosatmyfeeder_last_bird` (**Last bird**) | The most recent species identified; keeps its value after the bird leaves. |
 | `camera.whosatmyfeeder_last_bird_snapshot` | Picture of the most recent bird. |
