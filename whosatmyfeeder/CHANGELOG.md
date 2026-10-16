@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.1
+
+- **Bird at feeder** now reads `No bird` when the feeder is empty. It sent
+  `None`, which Home Assistant treats as "no value" and showed as Unknown, so an
+  empty feeder looked the same as an unidentified bird (`Unknown bird`).
+- New `status` attribute: `none`, `unidentified` or `identified`, for automations.
+
 ## 2.2.0
 
 - New Home Assistant entities (via MQTT discovery) for what's at the feeder

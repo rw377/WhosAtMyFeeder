@@ -9,7 +9,9 @@ import threading
 from datetime import datetime, timedelta
 
 STALE_AFTER = timedelta(minutes=5)   # no news from Frigate for this long = gone
-UNKNOWN = 'Unknown bird'
+UNKNOWN = 'Unknown bird'   # a bird is there but hasn't been identified (yet)
+NO_BIRD = 'No bird'        # nothing at the feeder. Not "None": Home Assistant reads a
+                           # literal "None" from MQTT as no value and shows "Unknown".
 
 
 class Presence(object):
@@ -72,14 +74,15 @@ class Presence(object):
         with self._lock:
             birds = list(self._birds.values())
         if not birds:
-            return {'present': False, 'common_name': 'None', 'scientific_name': None, 'confidence': None,
-                    'camera': None, 'since': None, 'count': 0, 'species': []}
+            return {'present': False, 'status': 'none', 'common_name': NO_BIRD, 'scientific_name': None,
+                    'confidence': None, 'camera': None, 'since': None, 'count': 0, 'species': []}
         named = [b for b in birds if b.get('scientific_name')]
         # Headline bird: the most confident identification; else the earliest arrival.
         lead = max(named, key=lambda b: b['confidence']) if named else min(birds, key=lambda b: b['since'])
         species = sorted({b['common_name'] for b in named})
         return {
             'present': True,
+            'status': 'identified' if named else 'unidentified',
             'common_name': lead.get('common_name') or UNKNOWN,
             'scientific_name': lead.get('scientific_name'),
             'confidence': round(lead['confidence'], 3) if lead.get('scientific_name') else None,
@@ -92,7 +95,7 @@ class Presence(object):
     def _changed(self, now, force=False):
         st = self.state()
         # Compare without 'since' churn: only publish when what HA shows would change.
-        key = (st['present'], st['common_name'], st['confidence'], st['count'], tuple(st['species']), st['camera'])
+        key = (st['present'], st['status'], st['common_name'], st['confidence'], st['count'], tuple(st['species']), st['camera'])
         if force or key != self._last:
             self._last = key
             self._publish(st)
