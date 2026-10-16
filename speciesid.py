@@ -1,6 +1,7 @@
 import json
 import multiprocessing
 import sys
+import threading
 import time
 from datetime import datetime
 from io import BytesIO
@@ -13,10 +14,12 @@ from PIL import Image, ImageOps
 import db
 import frigate
 import notifier as notifier_mod
+import presence as presence_mod
 
 classifier = None
 config = None
 notifier = None
+presence = None
 firstmessage = True
 
 BACKGROUND_INDEX = 964  # the model's "background" class
@@ -46,6 +49,8 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(config['frigate']['main_topic'] + "/events")
     db.set_runtime('mqtt', {'connected': True, 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
     notifier.on_connect(db.get_settings())
+    if presence is not None:
+        presence.clear()  # nothing is known to be present after a (re)connect
 
 
 def on_disconnect(client, userdata, rc):
@@ -104,6 +109,14 @@ def handle_event(payload_dict):
         print("Ignoring event with unexpected id: %r" % frigate_event, flush=True)
         return
 
+    # Track who's at the feeder right now: "end" means Frigate stopped tracking it.
+    ended = payload_dict.get('type') == 'end'
+    if presence is not None:
+        if ended:
+            presence.left(frigate_event)
+        else:
+            presence.seen(frigate_event, cam)
+
     response = requests.get(frigate_url + "/api/events/" + frigate_event + "/snapshot.jpg",
                             params={"crop": 1, "quality": 95}, timeout=15)
     if response.status_code != 200:
@@ -135,6 +148,9 @@ def handle_event(payload_dict):
             return
         if score <= threshold_for(settings, prefs):
             return
+
+        if presence is not None and not ended:
+            presence.identified(frigate_event, cam, display_name, db.common_name(conn, display_name), score)
 
         existing = conn.execute("SELECT * FROM detections WHERE frigate_event = ?", (frigate_event,)).fetchone()
         if existing is not None and score <= existing['score']:
@@ -197,6 +213,17 @@ def run_mqtt_client():
     client = notifier_mod.mqtt_client_from_config(config, "birdspeciesid" + datetime.now().strftime("%Y%m%d%H%M%S"))
     notifier = notifier_mod.Notifier(client)
     prefix = db.get_settings()['mqtt']['topic_prefix']
+    global presence
+    presence = presence_mod.Presence(lambda st: notifier.publish_current(prefix, st))
+
+    def expire_loop():
+        while True:
+            time.sleep(30)
+            try:
+                presence.expire()
+            except Exception as e:
+                print("presence expiry failed: %r" % e, flush=True)
+    threading.Thread(target=expire_loop, daemon=True).start()
     client.will_set(prefix + '/status', 'offline', qos=1, retain=True)
     client.on_message = on_message
     client.on_disconnect = on_disconnect

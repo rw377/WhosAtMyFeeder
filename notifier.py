@@ -4,6 +4,7 @@ Topics (prefix defaults to "whosatmyfeeder"):
   <prefix>/status      online/offline (retained, MQTT last will)
   <prefix>/last        JSON of the most recent detection (retained) -> "Last bird" sensor
   <prefix>/snapshot    JPEG of the most recent detection (retained) -> "Last bird" camera
+  <prefix>/current     who's at the feeder right now (retained) -> "Bird at feeder" sensors
   <prefix>/detection   every detection, when "Publish every detection" is on
   <prefix>/alert       watchlist matches, life-list firsts and returning species
   whosatmyfeeder/detections   plain common name, the original app's topic (optional)
@@ -119,6 +120,16 @@ class Notifier(object):
             'homeassistant/camera/whosatmyfeeder/last_bird/config': dict(avail, **{
                 'name': 'Last bird snapshot', 'unique_id': 'whosatmyfeeder_last_bird_snapshot',
                 'object_id': 'whosatmyfeeder_last_bird_snapshot', 'topic': prefix + '/snapshot', 'device': device}),
+            'homeassistant/sensor/whosatmyfeeder/current_bird/config': dict(avail, **{
+                'name': 'Bird at feeder', 'unique_id': 'whosatmyfeeder_current_bird',
+                'object_id': 'whosatmyfeeder_current_bird', 'state_topic': prefix + '/current',
+                'value_template': "{{ value_json.common_name if value_json.present else 'None' }}",
+                'json_attributes_topic': prefix + '/current', 'icon': 'mdi:bird', 'device': device}),
+            'homeassistant/binary_sensor/whosatmyfeeder/bird_present/config': dict(avail, **{
+                'name': 'Bird present', 'unique_id': 'whosatmyfeeder_bird_present',
+                'object_id': 'whosatmyfeeder_bird_present', 'state_topic': prefix + '/current',
+                'value_template': "{{ 'ON' if value_json.present else 'OFF' }}",
+                'device_class': 'occupancy', 'device': device}),
             'homeassistant/binary_sensor/whosatmyfeeder/status/config': {
                 'name': 'Online', 'unique_id': 'whosatmyfeeder_online', 'object_id': 'whosatmyfeeder_online',
                 'state_topic': prefix + '/status', 'payload_on': 'online', 'payload_off': 'offline',
@@ -126,6 +137,9 @@ class Notifier(object):
         }
         for topic, cfg in configs.items():
             self._pub(topic, cfg, retain=True)
+
+    def publish_current(self, prefix, state):
+        self._pub(prefix + '/current', state, retain=True)
 
     # -------------------------------------------------------------- detections
 

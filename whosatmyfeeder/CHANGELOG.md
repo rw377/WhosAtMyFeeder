@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0
+
+- New Home Assistant entities (via MQTT discovery) for what's at the feeder
+  right now: **Bird at feeder** (species name, or "None") and **Bird present**
+  (occupancy on/off). They follow Frigate's tracking: a bird counts as present
+  from its first event until Frigate's "end" event, or 5 minutes without news.
+  Attributes include confidence, camera, arrival time, how many birds are being
+  tracked, and every species currently identified.
+- Published on `whosatmyfeeder/current` (retained JSON).
+
 ## 2.1.1
 
 - Fix: after an update, browsers could keep running the previous version's
