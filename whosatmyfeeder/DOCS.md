@@ -25,8 +25,18 @@ review flags, hidden species) is set in the app under **Settings**.
 ## Alerts in Home Assistant
 
 With **Home Assistant discovery** on (the default), the add-on creates a device
-with a **Last bird** sensor, a **Last bird snapshot** camera and an **Online**
-sensor. Species alerts arrive on `whosatmyfeeder/alert`. Settings → Notifications
+with these entities:
+
+| Entity | What it shows |
+| --- | --- |
+| `sensor.whosatmyfeeder_current_bird` (**Bird at feeder**) | The species at the feeder right now, `Unknown bird` while it's still being identified, or `None`. |
+| `binary_sensor.whosatmyfeeder_bird_present` (**Bird present**) | On while any bird is at the feeder. |
+| `sensor.whosatmyfeeder_last_bird` (**Last bird**) | The most recent species identified; keeps its value after the bird leaves. |
+| `camera.whosatmyfeeder_last_bird_snapshot` | Picture of the most recent bird. |
+| `binary_sensor.whosatmyfeeder_online` | Whether the add-on is connected. |
+
+"Right now" follows Frigate's tracking: a bird is present from Frigate's first
+event for it until its "end" event (or 5 minutes without updates). Species alerts arrive on `whosatmyfeeder/alert`. Settings → Notifications
 has a copy-ready automation that sends a phone notification with the picture.
 
 ## Moving over from the original add-on
