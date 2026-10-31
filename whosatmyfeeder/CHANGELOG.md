@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.1
+
+- `frigate_topic` is now optional, so the configuration saves with
+  `source: blueiris` and no Frigate options. It still defaults to `frigate`.
+
 ## 2.3.0
 
 - **Blue Iris as an event source.** New `source` option (`frigate` or `blueiris`)
