@@ -67,7 +67,7 @@ Set `source: blueiris`. In Blue Iris, have CodeProject.AI confirm `bird` on the
 camera (analysing the main stream), and add an **On alert** MQTT action:
 
 * topic `BlueIris/&CAM/alert`
-* payload `{"id":"&ALERT_DB","camera":"&CAM","detections":&JSON}`
+* payload `{"id":"&ALERT_DB","path":"&ALERT_PATH","camera":"&CAM","detections":&JSON}`
 
 Then give the app the Blue Iris web server and a user (`bi_url`, `bi_username`,
 `bi_password`; in `config.yml` these are `blueiris: url/username/password/topic`)

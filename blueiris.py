@@ -4,7 +4,11 @@ Blue Iris publishes an MQTT message when a camera alert is confirmed by its AI
 (CodeProject.AI). The alert action is set up to send:
 
     topic:   BlueIris/&CAM/alert
-    payload: {"id":"&ALERT_DB","camera":"&CAM","detections":&JSON}
+    payload: {"id":"&ALERT_DB","path":"&ALERT_PATH","camera":"&CAM","detections":&JSON}
+
+&ALERT_DB is the alert's database id (used as the event id). The alert image is
+served at /alerts/&ALERT_PATH; /alerts/&ALERT_DB is tried too, for payloads
+without "path".
 
 for example (camera names are case-sensitive):
 
@@ -41,6 +45,8 @@ PAD = 0.12          # grow the bird box by this fraction of its size on each sid
 MIN_PAD_PX = 12
 
 ALERT_RE = re.compile(r'^@?[A-Za-z0-9][A-Za-z0-9._-]{0,70}$')
+PATH_RE = re.compile(r'^@?[A-Za-z0-9][A-Za-z0-9@._-]{0,200}$')   # a file name, no slashes
+RETRY_AFTER = 1.5   # the alert image can lag the MQTT message slightly
 
 
 def bi_config(config):
@@ -121,28 +127,64 @@ class Client(object):
         r = self._http.post(self.url + '/json', json=body, timeout=TIMEOUT)
         return r.json()
 
-    def image(self, path, params=None):
-        """GET an image. Logs in again once if the session expired. Returns bytes or None."""
+    def image(self, path, params=None, quiet=False, with_status=False):
+        """GET an image. Logs in again once if the session expired. Returns bytes or None
+        (or (bytes, status) with with_status)."""
+        status = None
         for attempt in (1, 2):
             try:
                 r = self._get(path, params)
             except requests.RequestException as e:
                 print('Blue Iris request %s failed: %s' % (path, e), flush=True)
-                return None
+                return (None, None) if with_status else None
+            status = r.status_code
             if r.status_code == 200 and r.headers.get('Content-Type', '').startswith('image/'):
-                return r.content
-            # An expired session comes back as the login page (200 text/html) or 401/403.
-            if attempt == 1 and self.username:
+                return (r.content, 200) if with_status else r.content
+            # An expired session comes back as the login page (200 text/html) or 401/403;
+            # a 404 is a real "not found", so don't log in again for it.
+            if attempt == 1 and self.username and r.status_code != 404:
                 with self._lock:
                     self._session, self._basic = None, False
                 continue
-            print('Blue Iris %s returned %s %s' % (path, r.status_code, r.headers.get('Content-Type', '')), flush=True)
-        return None
+            if not quiet:
+                print('Blue Iris %s returned %s %s' % (path, r.status_code, r.headers.get('Content-Type', '')), flush=True)
+            break
+        return (None, status) if with_status else None
 
-    def alert_image(self, alert_id):
-        if not valid_alert(alert_id):
-            return None
-        return self.image('/alerts/%s' % quote(alert_id, safe='@'), {'fulljpeg': ''})
+    def alert_image(self, alert_id, alert_path=None):
+        """The alert's full-resolution JPEG: /alerts/<&ALERT_PATH>, else /alerts/<&ALERT_DB>,
+        each with ?fulljpeg then without. If everything is 404, try once more after a
+        moment in case the image isn't written yet."""
+        names = []
+        if alert_path:
+            if PATH_RE.match(alert_path):
+                names.append(alert_path)
+            else:
+                print('Blue Iris alert path %r looks wrong; not using it' % alert_path, flush=True)
+        if valid_alert(alert_id):
+            names.append(alert_id)
+        tried = []
+        for round_ in (1, 2):
+            only_404 = True
+            for name in names:
+                for params in ({'fulljpeg': ''}, None):
+                    path = '/alerts/%s' % quote(name, safe='@')
+                    data, status = self.image(path, params, quiet=True, with_status=True)
+                    if data:
+                        if round_ > 1 or name != names[0] or params is None:
+                            print('Blue Iris alert image came from %s%s%s' %
+                                  (path, '?fulljpeg' if params else '', ' (after a retry)' if round_ > 1 else ''), flush=True)
+                        return data
+                    tried.append('%s%s -> %s' % (path, '?fulljpeg' if params else '', status))
+                    only_404 = only_404 and status == 404
+            if not only_404 or not names:
+                break
+            time.sleep(RETRY_AFTER)
+        print('Blue Iris alert image not found. Tried: %s' % '; '.join(tried), flush=True)
+        if not alert_path:
+            print('Add "path":"&ALERT_PATH" to the Blue Iris alert payload: the image is served by its path, '
+                  'not its database id.', flush=True)
+        return None
 
     def live_image(self, camera, height=720):
         return self.image('/image/%s' % quote(camera, safe=''), {'h': int(height), 'q': 80})
@@ -273,13 +315,14 @@ def parse_alert(payload, topic=None, now=None):
         return None
     bird = best_bird(payload.get('detections'))
     if bird is None:
+        # Not logged here: other cameras' alerts often share the topic. The caller
+        # logs it for cameras it watches.
         labels = sorted({p['label'] for p in predictions(payload.get('detections'))})
-        print('Blue Iris alert %s from %s has no "bird" box (labels: %s); ignoring' % (alert_id, cam, ', '.join(labels) or 'none'),
-              flush=True)
-        return None
+        return {'id': event_id(alert_id), 'alert_id': alert_id, 'camera': cam, 'box': None, 'labels': labels}
     return {
         'id': event_id(alert_id),
         'alert_id': alert_id,
+        'path': str(payload.get('path') or '').strip() or None,
         'camera': cam,
         # When CodeProject.AI analysed the frame; else when the message arrived.
         'time': _utc_to_local(bird.get('timestamp')) or now or datetime.now(),
@@ -294,7 +337,7 @@ _logged_scale = set()
 def fetch_images(config, ev):
     """Download the alert frame and cut out the bird. Returns (crop, full) bytes or (None, None)."""
     c = client(config)
-    full = c.alert_image(ev['alert_id'])
+    full = c.alert_image(ev['alert_id'], ev.get('path'))
     if full is None:
         print('Could not get the alert image for %s from Blue Iris' % ev['alert_id'], flush=True)
         return None, None

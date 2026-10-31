@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.2
+
+- Fix: Blue Iris alert images returned 404. Blue Iris serves them by the alert's
+  path, not its database id. **Add `"path":"&ALERT_PATH"` to the Blue Iris alert
+  payload**:
+  `{"id":"&ALERT_DB","path":"&ALERT_PATH","camera":"&CAM","detections":&JSON}`.
+  The app tries `/alerts/<path>` (full-resolution, then normal), then the
+  database id, and tries once more 1.5 seconds later if the image isn't there
+  yet. The log lists every URL it tried when none works.
+- Alerts without a bird from cameras you don't watch (e.g. other cameras sharing
+  the `BlueIris/+/alert` topic) are no longer logged, and no longer counted as
+  skipped bird events.
+
 ## 2.3.1
 
 - `frigate_topic` is now optional, so the configuration saves with

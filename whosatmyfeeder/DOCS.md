@@ -41,7 +41,7 @@ CodeProject.AI) over MQTT instead of Frigate events.
    `BlueIris/&CAM/alert` and payload:
 
    ```
-   {"id":"&ALERT_DB","camera":"&CAM","detections":&JSON}
+   {"id":"&ALERT_DB","path":"&ALERT_PATH","camera":"&CAM","detections":&JSON}
    ```
 
    Don't tick "retain". No "On reset" action is needed.
@@ -55,9 +55,9 @@ exactly as Blue Iris spells it (it's case-sensitive: `BirdFeeder` is not `birdfe
 
 How each alert is handled:
 
-- Test alerts (id `@-1`) and alerts without a `bird` prediction are skipped.
+- Test alerts (id `@-1`) and alerts without a `bird` prediction are skipped. Alerts from cameras you don't watch are ignored silently, so other cameras can publish to the same topic.
 - The most confident `bird` box across all of CodeProject.AI's results is used.
-- The full alert image (`/alerts/<id>?fulljpeg`) is downloaded. If it isn't the
+- The full alert image (`/alerts/<&ALERT_PATH>?fulljpeg`) is downloaded; if it isn't there yet, the app tries again 1.5 seconds later. If it isn't the
   camera's main-stream size, the box is scaled to fit; then it's clamped, padded by
   about 12%, and the bird is cropped out. The classifier shrinks its input to
   224×224, so classifying the whole frame would leave the bird a few pixels big.
