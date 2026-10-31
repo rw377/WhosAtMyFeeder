@@ -1,15 +1,32 @@
 configuration:
+  source:
+    name: Event source
+    description: >-
+      Where bird events come from: frigate, or blueiris (Blue Iris alerts
+      confirmed by CodeProject.AI, sent over MQTT). See the Documentation tab.
   frigate_url:
     name: Frigate URL
     description: >-
       Where Frigate's API is. For the Frigate add-on this is usually
-      http://ccab4aaf-frigate:5000.
+      http://ccab4aaf-frigate:5000. With Blue Iris, keep it only while backfilling
+      old pictures, then clear it.
   cameras:
     name: Cameras
     description: >-
-      Frigate camera names to watch, spelled exactly as in Frigate (e.g. bird_cam).
-      Easier: open the app and pick from the list under Settings → Cameras, which
-      overrides this.
+      Camera names to watch, spelled exactly as in Frigate, or as the Blue Iris
+      camera short name, case-sensitive (e.g. BirdFeeder). Can also be set in the app under
+      Settings → Cameras, which overrides this.
+  bi_url:
+    name: Blue Iris URL
+    description: Blue Iris web server, e.g. http://192.168.1.20:81.
+  bi_username:
+    name: Blue Iris username
+    description: A Blue Iris user that can view the bird camera. Leave empty if the web server needs no login from this host.
+  bi_password:
+    name: Blue Iris password
+  bi_topic:
+    name: Blue Iris MQTT topic
+    description: Topic the Blue Iris alert action publishes to. Default BlueIris/+/alert.
   frigate_topic:
     name: Frigate MQTT topic
     description: Frigate's MQTT topic prefix (usually "frigate").

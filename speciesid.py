@@ -11,6 +11,7 @@ import paho.mqtt.client as mqtt
 import requests
 from PIL import Image, ImageOps
 
+import blueiris
 import db
 import frigate
 import notifier as notifier_mod
@@ -23,6 +24,8 @@ presence = None
 firstmessage = True
 
 BACKGROUND_INDEX = 964  # the model's "background" class
+SOURCE = 'frigate'      # set from config: 'frigate' or 'blueiris'
+SOURCE_NAME = {'frigate': 'Frigate', 'blueiris': 'Blue Iris'}
 
 
 def classify(image):
@@ -45,8 +48,13 @@ def on_connect(client, userdata, flags, rc):
         db.set_runtime('mqtt', {'connected': False, 'error': 'connection refused (code %s)' % rc,
                                 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
         return
-    print("MQTT Connected; watching bird events from cameras: %s" % ', '.join(watched_cameras()), flush=True)
-    client.subscribe(config['frigate']['main_topic'] + "/events")
+    if SOURCE == 'blueiris':
+        topic = blueiris.bi_config(config).get('topic') or 'BlueIris/+/alert'
+    else:
+        topic = config['frigate']['main_topic'] + "/events"
+    print("MQTT Connected; watching %s bird events on %s from cameras: %s" %
+          (SOURCE_NAME[SOURCE], topic, ', '.join(watched_cameras())), flush=True)
+    client.subscribe(topic)
     db.set_runtime('mqtt', {'connected': True, 'since': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')})
     notifier.on_connect(db.get_settings())
     if presence is not None:
@@ -60,12 +68,16 @@ def on_disconnect(client, userdata, rc):
 
 def on_message(client, userdata, message):
     global firstmessage
-    if firstmessage:
+    if SOURCE == 'blueiris':
+        if message.retain:  # an old alert replayed by the broker, not a bird that's there now
+            print("skipping retained Blue Iris message on %s" % message.topic, flush=True)
+            return
+    elif firstmessage:
         firstmessage = False
         print("skipping first message", flush=True)
         return
     try:
-        handle_event(json.loads(message.payload))
+        handle_event(json.loads(message.payload), message.topic)
     except Exception as e:  # never let one bad event kill the MQTT loop
         print("Error handling event: %r" % e, flush=True)
 
@@ -77,11 +89,32 @@ def watched_cameras(settings=None):
     return db.effective_cameras(config, settings)
 
 
-def handle_event(payload_dict):
+def _frigate_event(payload_dict):
     after_data = payload_dict.get('after', {})
     if after_data.get('label') != 'bird':
+        return None
+    return {'id': after_data.get('id'), 'camera': after_data.get('camera'),
+            'time': datetime.fromtimestamp(after_data['start_time']),
+            'ended': payload_dict.get('type') == 'end'}
+
+
+def _frigate_images(ev):
+    response = requests.get(config['frigate']['frigate_url'] + "/api/events/" + ev['id'] + "/snapshot.jpg",
+                            params={"crop": 1, "quality": 95}, timeout=15)
+    if response.status_code != 200:
+        print("Error: Could not retrieve the image. Status code: %s" % response.status_code, flush=True)
+        return None, None
+    return response.content, None  # full frame is fetched later, only if it's going to be cached
+
+
+def handle_event(payload_dict, topic=None):
+    if SOURCE == 'blueiris':
+        ev = blueiris.parse_alert(payload_dict, topic)
+    else:
+        ev = _frigate_event(payload_dict)
+    if ev is None:
         return
-    cam = after_data.get('camera')
+    cam = ev['camera']
     cameras = watched_cameras()
     now_s = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     if cam not in cameras:
@@ -103,27 +136,31 @@ def handle_event(payload_dict):
         ignored.pop(cam)
         db.set_runtime('ignored_cameras', ignored)
 
-    frigate_event = after_data['id']
-    frigate_url = config['frigate']['frigate_url']
+    frigate_event = ev['id']  # stored in the frigate_event column whatever the source
+    frigate_url = config['frigate'].get('frigate_url')
     if not frigate.valid_event(frigate_event):
         print("Ignoring event with unexpected id: %r" % frigate_event, flush=True)
         return
 
-    # Track who's at the feeder right now: "end" means Frigate stopped tracking it.
-    ended = payload_dict.get('type') == 'end'
+    # Track who's at the feeder right now. Frigate: "end" means it stopped tracking
+    # the bird. Blue Iris has no end message, so one entry per camera is refreshed
+    # by each alert and the expiry loop clears it.
+    ended = ev.get('ended', False)
+    presence_key = ('bi:' + cam) if SOURCE == 'blueiris' else frigate_event
     if presence is not None:
         if ended:
-            presence.left(frigate_event)
+            presence.left(presence_key)
         else:
-            presence.seen(frigate_event, cam)
+            presence.seen(presence_key, cam)
 
-    response = requests.get(frigate_url + "/api/events/" + frigate_event + "/snapshot.jpg",
-                            params={"crop": 1, "quality": 95}, timeout=15)
-    if response.status_code != 200:
-        print("Error: Could not retrieve the image. Status code: %s" % response.status_code, flush=True)
+    if SOURCE == 'blueiris':
+        crop_bytes, full_bytes = blueiris.fetch_images(config, ev)
+    else:
+        crop_bytes, full_bytes = _frigate_images(ev)
+    if crop_bytes is None:
         return
 
-    image = Image.open(BytesIO(response.content)).convert('RGB')
+    image = Image.open(BytesIO(crop_bytes)).convert('RGB')
     max_size = (224, 224)
     image.thumbnail(max_size)
     padded_image = ImageOps.expand(image, border=((max_size[0] - image.size[0]) // 2,
@@ -132,7 +169,7 @@ def handle_event(payload_dict):
     index, score = category.index, category.score
     display_name, category_name = category.display_name, category.category_name
 
-    start_time = datetime.fromtimestamp(after_data['start_time'])
+    start_time = ev['time']
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
     print("%s %s" % (formatted_start_time, category), flush=True)
 
@@ -150,7 +187,8 @@ def handle_event(payload_dict):
             return
 
         if presence is not None and not ended:
-            presence.identified(frigate_event, cam, display_name, db.common_name(conn, display_name), score)
+            presence.identified(presence_key, cam, display_name, db.common_name(conn, display_name), score,
+                                latest=SOURCE == 'blueiris')
 
         existing = conn.execute("SELECT * FROM detections WHERE frigate_event = ?", (frigate_event,)).fetchone()
         if existing is not None and score <= existing['score']:
@@ -171,7 +209,7 @@ def handle_event(payload_dict):
             conn.execute("""INSERT INTO detections (detection_time, detection_index, score, display_name,
                             category_name, frigate_event, camera_name, flagged) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                          (formatted_start_time, index, score, display_name, category_name, frigate_event,
-                          after_data['camera'], flagged))
+                          cam, flagged))
         else:
             print("New score is higher. Updating record.", flush=True)
             conn.execute("""UPDATE detections SET detection_time = ?, detection_index = ?, score = ?, display_name = ?,
@@ -181,19 +219,21 @@ def handle_event(payload_dict):
         conn.commit()
 
         common = db.common_name(conn, display_name)
-        frigate.set_sublabel(frigate_url, frigate_event, common)
-        if settings['snapshots'].get('cache', True):
-            frigate.save_snapshot(frigate_event, 'crop', response.content)
-            full = frigate.fetch_snapshot(frigate_url, frigate_event, 'full')
+        if SOURCE == 'frigate':
+            frigate.set_sublabel(frigate_url, frigate_event, common)
+        # Blue Iris pictures are always cached: the app can't fetch them again later.
+        if SOURCE == 'blueiris' or settings['snapshots'].get('cache', True):
+            frigate.save_snapshot(frigate_event, 'crop', crop_bytes)
+            full = full_bytes or frigate.fetch_snapshot(frigate_url, frigate_event, 'full')
             if full:
                 frigate.save_snapshot(frigate_event, 'full', full)
 
         det = {'common_name': common, 'scientific_name': display_name, 'score': score,
-               'camera': after_data['camera'], 'time': start_time.strftime('%Y-%m-%dT%H:%M:%S'),
+               'camera': cam, 'time': start_time.strftime('%Y-%m-%dT%H:%M:%S'),
                'frigate_event': frigate_event, 'first_ever': first_ever, 'flagged': bool(flagged)}
         db.set_runtime('last_detection', {'common_name': common, 'time': det['time']})
         if species_changed:
-            notifier.on_detection(conn, settings, det, prev_seen, snapshot_bytes=response.content)
+            notifier.on_detection(conn, settings, det, prev_seen, snapshot_bytes=crop_bytes)
     finally:
         conn.close()
 
@@ -234,8 +274,9 @@ def run_mqtt_client():
 
 
 def load_config():
-    global config
+    global config, SOURCE
     config = db.load_config()
+    SOURCE = db.source(config)
 
 
 def main():

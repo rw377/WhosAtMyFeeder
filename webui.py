@@ -8,10 +8,12 @@ import io
 import os
 import sqlite3
 import tempfile
+import threading
 from datetime import datetime, timedelta
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
+import blueiris
 import db
 import frigate
 import notifier
@@ -34,7 +36,15 @@ def config():
 
 
 def frigate_url():
-    return config()['frigate']['frigate_url']
+    return config()['frigate'].get('frigate_url') or ''
+
+
+def source():
+    return db.source(config())
+
+
+def is_bi():
+    return source() == 'blueiris'
 
 
 def base_threshold(settings=None):
@@ -138,6 +148,8 @@ def snap(event_id):
 
 @app.route('/clip/<event_id>.mp4')
 def clip(event_id):
+    if is_bi():
+        abort(404)  # no clips from Blue Iris; Frigate's clips go when Frigate does
     r = frigate.clip_response(frigate_url(), event_id)
     if r is None:
         abort(404)
@@ -176,10 +188,13 @@ def api_status():
             'earliest_date': queries.earliest_date(conn),
             'mqtt': rt.get('mqtt', {'connected': False}),
             'broker': '%s:%s' % (f.get('mqtt_server'), notifier.mqtt_port(cfg)),
+            'source': source(),
+            'source_url': blueiris.bi_config(cfg).get('url') if is_bi() else f.get('frigate_url'),
             'frigate_url': f.get('frigate_url'),
+            'clips': not is_bi(),
             'cameras': db.effective_cameras(cfg),
             'config_cameras': cams if isinstance(cams, list) else [cams],
-            'frigate_ui': frigate.frigate_ui_link(f.get('frigate_url') or ''),
+            'frigate_ui': blueiris.ui_link(cfg) if is_bi() else frigate.frigate_ui_link(f.get('frigate_url') or ''),
             'threshold': base_threshold(),
             'config_threshold': float(cfg['classification']['threshold']),
             'cache': frigate.cache_usage(),
@@ -194,10 +209,13 @@ def api_status():
 
 @app.route('/api/cameras')
 def api_cameras():
-    """Frigate's cameras merged with what this app is watching and has seen."""
-    cams, error = frigate.list_cameras(frigate_url())
+    """The source's cameras merged with what this app is watching and has seen."""
     settings = db.get_settings()
     watched = set(db.effective_cameras(config(), settings))
+    if is_bi():
+        cams, error = blueiris.list_cameras(config(), watched)
+    else:
+        cams, error = frigate.list_cameras(frigate_url())
     conn = db.connect()
     try:
         counts = {r[0]: (r[1], r[2]) for r in conn.execute(
@@ -225,7 +243,10 @@ def live_frame(camera):
         h = max(120, min(1080, int(request.args.get('h', 720))))
     except ValueError:
         h = 720
-    data = frigate.latest_frame(frigate_url(), camera, h)
+    if is_bi():
+        data = blueiris.latest_frame(config(), camera, h)
+    else:
+        data = frigate.latest_frame(frigate_url(), camera, h)
     if data is None:
         abort(404)
     return Response(data, mimetype='image/jpeg', headers={'Cache-Control': 'no-store'})
@@ -363,7 +384,8 @@ def api_detection_update(det_id):
                 abort(400, 'unknown species')
             conn.execute("UPDATE detections SET display_name = ?, category_name = ?, reviewed = 1, flagged = 0 WHERE id = ?",
                          (sci, sci, det_id))
-            frigate.set_sublabel(frigate_url(), row['frigate_event'], db.common_name(conn, sci))
+            if not is_bi():
+                frigate.set_sublabel(frigate_url(), row['frigate_event'], db.common_name(conn, sci))
         if data.get('reviewed'):
             conn.execute("UPDATE detections SET reviewed = 1 WHERE id = ?", (det_id,))
         conn.commit()
@@ -518,6 +540,47 @@ def api_alerts_recent():
                          'sent_at': r['sent_at'].replace(' ', 'T')} for r in rows])
     finally:
         conn.close()
+
+
+# ------------------------------------------------------------------ snapshot backfill
+
+_backfill = {'running': False}
+_backfill_lock = threading.Lock()
+
+
+@app.route('/api/snapshots/backfill', methods=['GET', 'POST'])
+def api_backfill():
+    """Copy Frigate's pictures for every detection into the cache, so history keeps
+    its pictures after Frigate is removed. POST starts it; GET reports progress."""
+    global _backfill
+    if request.method == 'POST':
+        body()
+        if not frigate_url():
+            abort(400, 'no Frigate URL is configured')
+        with _backfill_lock:
+            if _backfill.get('running'):
+                return jsonify(_backfill)
+            _backfill = {'running': True, 'total': None, 'done': 0, 'saved': 0, 'gone': 0, 'failed': 0,
+                         'started': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}
+        conn = db.connect()
+        try:
+            events = [r[0] for r in conn.execute("SELECT frigate_event FROM detections ORDER BY detection_time DESC")]
+        finally:
+            conn.close()
+        url = frigate_url()
+
+        def run():
+            def progress(st):
+                _backfill.update(st)
+            try:
+                st = frigate.backfill(url, events, progress)
+                _backfill.update(st)
+            except Exception as e:
+                _backfill['error'] = str(e)
+            _backfill.update(running=False, finished=datetime.now().strftime('%Y-%m-%dT%H:%M:%S'))
+            print('Snapshot backfill finished: %s' % _backfill, flush=True)
+        threading.Thread(target=run, daemon=True).start()
+    return jsonify(_backfill)
 
 
 @app.route('/api/mqtt/test', methods=['POST'])

@@ -2,6 +2,7 @@
 
 Turns the add-on options into the app's config.yml, filling in the MQTT broker
 from the Supervisor (the Mosquitto add-on) when none is set, then starts the app.
+The event source is Frigate or Blue Iris (option `source`).
 """
 import json
 import os
@@ -45,17 +46,36 @@ def main():
               'or install the Mosquitto broker add-on.', flush=True)
         sys.exit(1)
 
+    source = 'blueiris' if opts.get('source') == 'blueiris' else 'frigate'
+    frigate_url = (opts.get('frigate_url') or '').rstrip('/')
+    bi_url = (opts.get('bi_url') or '').rstrip('/')
+    if source == 'frigate' and not frigate_url:
+        print('source is frigate but frigate_url is empty. Set it in the add-on configuration.', flush=True)
+        sys.exit(1)
+    if source == 'blueiris' and not bi_url:
+        print('source is blueiris but bi_url is empty. Set it in the add-on configuration.', flush=True)
+        sys.exit(1)
+    print('Event source: %s' % ('Blue Iris at %s' % bi_url if source == 'blueiris' else 'Frigate at %s' % frigate_url),
+          flush=True)
+
     config = {
+        'source': source,
         'frigate': {
-            'frigate_url': opts['frigate_url'].rstrip('/'),
+            'frigate_url': frigate_url,
             'mqtt_server': server,
             'mqtt_port': int(port or 1883),
             'mqtt_auth': bool(user),
             'mqtt_username': user or '',
             'mqtt_password': password or '',
             'main_topic': opts.get('frigate_topic') or 'frigate',
-            'camera': opts.get('cameras') or ['birdcam'],
+            'camera': opts.get('cameras') or ['BirdFeeder'],
             'object': 'bird',
+        },
+        'blueiris': {
+            'url': bi_url,
+            'username': opts.get('bi_username') or '',
+            'password': opts.get('bi_password') or '',
+            'topic': opts.get('bi_topic') or 'BlueIris/+/alert',
         },
         'classification': {'model': '/app/model.tflite', 'threshold': float(opts.get('threshold', 0.7))},
         'webui': {'port': 7766, 'host': '0.0.0.0'},

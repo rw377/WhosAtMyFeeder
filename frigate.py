@@ -7,6 +7,7 @@ in a URL or a file path.
 import json
 import os
 import re
+import time
 
 import requests
 
@@ -15,6 +16,7 @@ from db import DATA_DIR
 SNAP_DIR = os.path.join(DATA_DIR, 'snapshots')
 EVENT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$')
 TIMEOUT = 10
+_down_until = 0.0   # after a connection error, don't ask Frigate again for a while
 
 
 def valid_event(event_id):
@@ -41,8 +43,9 @@ def save_snapshot(event_id, kind, content):
 def fetch_snapshot(frigate_url, event_id, kind, with_status=False):
     """Download from Frigate. Returns bytes or None (or (bytes, gone) with with_status,
     where gone means Frigate answered and no longer has the event)."""
+    global _down_until
     content, gone = None, False
-    if valid_event(event_id):
+    if frigate_url and valid_event(event_id) and time.time() >= _down_until:
         params = {'crop': 1, 'quality': 90} if kind == 'crop' else {'quality': 90}
         try:
             r = requests.get('%s/api/events/%s/snapshot.jpg' % (frigate_url.rstrip('/'), event_id),
@@ -52,7 +55,8 @@ def fetch_snapshot(frigate_url, event_id, kind, with_status=False):
             elif r.status_code in (404, 410):
                 gone = True
         except requests.RequestException as e:
-            print('Frigate snapshot fetch failed for %s: %s' % (event_id, e), flush=True)
+            _down_until = time.time() + 300  # e.g. Frigate removed: don't stall every thumbnail
+            print('Frigate snapshot fetch failed for %s: %s (not retrying for 5 minutes)' % (event_id, e), flush=True)
     return (content, gone) if with_status else content
 
 
@@ -78,6 +82,8 @@ def get_snapshot(frigate_url, event_id, kind, cache=True):
     path = snapshot_path(event_id, kind)
     if os.path.exists(path):
         return path
+    if not frigate_url or event_id.startswith('bi-'):
+        return None  # only the cache has these (Blue Iris events, or Frigate is gone)
     marker = _missing_marker(event_id)
     if os.path.exists(marker):
         return None  # Frigate already said it's gone; don't ask again on every page view
@@ -117,7 +123,7 @@ def cache_usage():
 
 
 def clip_response(frigate_url, event_id):
-    if not valid_event(event_id):
+    if not frigate_url or not valid_event(event_id):
         return None
     try:
         r = requests.get('%s/api/events/%s/clip.mp4' % (frigate_url.rstrip('/'), event_id),
@@ -130,7 +136,7 @@ def clip_response(frigate_url, event_id):
 
 
 def set_sublabel(frigate_url, event_id, sublabel):
-    if not valid_event(event_id):
+    if not frigate_url or not valid_event(event_id):
         return False
     sublabel = sublabel[:20]  # Frigate limits sub labels to 20 characters
     try:
@@ -188,10 +194,50 @@ def latest_frame(frigate_url, camera, height=720):
     return None
 
 
+def backfill(frigate_url, event_ids, progress=None):
+    """Copy Frigate's pictures for these events into the cache (both crop and full),
+    skipping ones already cached or known gone. progress(dict) is called as it goes.
+    Run this before removing Frigate so old detections keep their pictures."""
+    global _down_until
+    _down_until = 0.0
+    have, gone = cached_events(), missing_events()
+    todo = [e for e in event_ids if valid_event(e) and not e.startswith('bi-') and e not in have and e not in gone]
+    st = {'total': len(todo), 'done': 0, 'saved': 0, 'gone': 0, 'failed': 0}
+    for ev in todo:
+        got = 0
+        for kind in ('crop', 'full'):
+            if os.path.exists(snapshot_path(ev, kind)):
+                got += 1
+                continue
+            content, is_gone = fetch_snapshot(frigate_url, ev, kind, with_status=True)
+            if content:
+                save_snapshot(ev, kind, content)
+                got += 1
+            elif is_gone:
+                m = _missing_marker(ev)
+                os.makedirs(os.path.dirname(m), exist_ok=True)
+                open(m, 'w').close()
+                st['gone'] += 1
+                break
+            else:
+                st['failed'] += 1
+                break
+        st['saved'] += 1 if got == 2 else 0
+        st['done'] += 1
+        if progress:
+            progress(dict(st))
+        if time.time() < _down_until:
+            st['error'] = 'Frigate stopped answering at %s' % frigate_url
+            break
+    return st
+
+
 def frigate_ui_link(frigate_url):
     """Where the browser can open Frigate's own UI. Inside Home Assistant, Frigate's
     add-on host name (e.g. ccab4aaf-frigate) maps to its ingress path."""
     from urllib.parse import urlparse
+    if not frigate_url:
+        return None
     host = urlparse(frigate_url).hostname or ''
     m = re.match(r'^([0-9a-f]{8})-(frigate[a-z0-9_-]*)$', host)
     if m:

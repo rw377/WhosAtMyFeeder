@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.3.0
+
+- **Blue Iris as an event source.** New `source` option (`frigate` or `blueiris`)
+  plus `bi_url`, `bi_username`, `bi_password` and `bi_topic`. With Blue Iris, the
+  app listens for the alert action's MQTT message, downloads the full alert image,
+  crops out the most confident CodeProject.AI `bird` box (scaled if the image isn't
+  main-stream size, padded ~12%), and classifies the crop. Test alerts (`@-1`) and
+  alerts without a bird are skipped; the detection time comes from
+  `timestampUTC`. See the Documentation tab for the Blue Iris setup.
+- With Blue Iris, pictures are always cached, clips and Frigate sub labels are off,
+  Settings → Cameras lists the configured cameras, the live view uses Blue Iris,
+  and "Open Blue Iris" replaces "Open Frigate". **Bird present** follows Blue Iris
+  alerts and clears 5 minutes after the last one.
+- **Settings → Snapshots & data → Copy pictures from Frigate** caches Frigate's
+  snapshots for every past detection, so history keeps its pictures after Frigate
+  is removed. Clips aren't copied.
+- `frigate_url` is now optional, and the app stops asking an unreachable Frigate
+  for 5 minutes instead of on every thumbnail.
+- The default camera list is now `BirdFeeder`. Existing installs keep their own
+  `cameras` setting.
+- No database changes: Blue Iris event ids are stored as `bi-<alert id>` in the
+  existing column.
+
 ## 2.2.1
 
 - **Bird at feeder** now reads `No bird` when the feeder is empty. It sent
