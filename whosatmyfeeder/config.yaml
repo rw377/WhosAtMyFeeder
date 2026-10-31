@@ -21,23 +21,23 @@ ports_description:
   7766/tcp: Direct web UI access (optional; the sidebar panel works without it)
 options:
   source: frigate
-  frigate_url: http://ccab4aaf-frigate:5000
   cameras:
     - BirdFeeder
-  frigate_topic: frigate
-  bi_topic: BlueIris/+/alert
   threshold: 0.7
+  bi_topic: BlueIris/+/alert
+  frigate_url: http://ccab4aaf-frigate:5000
+  frigate_topic: frigate
 schema:
   source: list(frigate|blueiris)
-  frigate_url: url?
   cameras:
     - str
-  frigate_topic: str?
+  threshold: float(0.1,0.99)
   bi_url: url?
   bi_username: str?
   bi_password: password?
   bi_topic: str?
-  threshold: float(0.1,0.99)
+  frigate_url: url?
+  frigate_topic: str?
   mqtt_server: str?
   mqtt_port: port?
   mqtt_username: str?
