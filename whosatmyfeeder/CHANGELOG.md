@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.1
+
+- `frigate_topic` is now optional, so the configuration saves with
+  `source: blueiris` and no Frigate options. It still defaults to `frigate`.
+- Clearer Configuration tab: options are labelled **[Blue Iris]** or **[Frigate]**
+  by the source they belong to, and ordered source, cameras, threshold, then the
+  Blue Iris options, the Frigate options and MQTT. Home Assistant can't hide
+  options based on another option, so all of them are still listed.
+
 ## 2.3.0
 
 - **Blue Iris as an event source.** New `source` option (`frigate` or `blueiris`)

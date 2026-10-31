@@ -15,14 +15,14 @@ searchable history, per-species pages, stats, and MQTT alerts for the birds you 
 
 | Option | What it does |
 | --- | --- |
-| `source` | `frigate` (default) or `blueiris`. |
-| `frigate_url` | Where Frigate's API is. For the Frigate add-on this is usually `http://ccab4aaf-frigate:5000`. Optional with Blue Iris (see below). |
-| `cameras` | Camera names to watch for birds: Frigate camera names, or Blue Iris camera short names, spelled exactly (case-sensitive). Can also be picked in the app under **Settings → Cameras**, which overrides this option. |
-| `frigate_topic` | Frigate's MQTT topic prefix (default `frigate`). |
-| `bi_url` | Blue Iris web server, e.g. `http://192.168.1.20:81`. Needed with `source: blueiris`. |
-| `bi_username`, `bi_password` | A Blue Iris user that can view the bird camera. |
-| `bi_topic` | Topic the Blue Iris alert action publishes to (default `BlueIris/+/alert`). |
+| `source` | `frigate` (default) or `blueiris`. Options marked [Blue Iris] or [Frigate] are only used with that source. |
+| `cameras` | Camera names to watch for birds, spelled exactly (case-sensitive): Blue Iris camera short names (e.g. `BirdFeeder`) or Frigate camera names. Can also be picked in the app under **Settings → Cameras**, which overrides this option. |
 | `threshold` | Minimum classifier confidence to record a detection. Can be overridden in the app. |
+| `bi_url` [Blue Iris] | Blue Iris web server, e.g. `http://192.168.1.20:81`. Required with `source: blueiris`. |
+| `bi_username`, `bi_password` [Blue Iris] | A Blue Iris user (as for UI3) that can view the bird camera. |
+| `bi_topic` [Blue Iris] | Topic the Blue Iris alert action publishes to (default `BlueIris/+/alert`). |
+| `frigate_url` [Frigate] | Where Frigate's API is; usually `http://ccab4aaf-frigate:5000` for the Frigate add-on. Required with `source: frigate`. With Blue Iris it's only used for old Frigate pictures (see below). |
+| `frigate_topic` [Frigate] | Frigate's MQTT topic prefix (default `frigate`). |
 | `mqtt_server`, `mqtt_port`, `mqtt_username`, `mqtt_password` | Only needed if you don't use the Mosquitto add-on. |
 
 Open the app from the sidebar (**Feeder**). Click the camera status in the top right for a live view. Everything else (alerts, quiet hours,
