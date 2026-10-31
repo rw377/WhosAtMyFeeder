@@ -117,6 +117,8 @@
   /* ------------------------------------------------------------------ status */
 
   var status = null;
+  function srcName() { return status && status.source === 'blueiris' ? 'Blue Iris' : 'Frigate'; }
+  function clipsOn() { return !status || status.clips !== false; }
   function loadStatus() {
     return api('status').then(function (s) {
       status = s;
@@ -150,7 +152,7 @@
     }
     var ign = Object.keys(status.ignored_cameras || {}).filter(function (c) { return status.cameras.indexOf(c) < 0; });
     if (ign.length) {
-      return '<div class="flagbox" role="alert" style="margin:0">Frigate is sending bird events from ' +
+      return '<div class="flagbox" role="alert" style="margin:0">' + srcName() + ' is sending bird events from ' +
         ign.map(function (c) { var e = status.ignored_cameras[c]; return '<b class="mono">' + esc(c) + '</b> (' + num(e.count) + ', last ' + esc(fmtShort(e.last)) + ')'; }).join(', ') +
         ', but ' + (ign.length > 1 ? 'those cameras aren’t' : 'that camera isn’t') + ' in your cameras list (<span class="mono">' + esc(status.cameras.join(', ') || 'empty') +
         '</span>), so the events are being skipped. <a href="#/settings/cameras">Choose cameras in Settings → Cameras</a>.</div>';
@@ -249,6 +251,7 @@
 
   function openViewer(d, mode) {
     var inner = viewer.querySelector('.viewer-inner');
+    if (mode === 'clip' && !clipsOn()) mode = 'snap';
     var media = mode === 'clip'
       ? '<video controls autoplay playsinline src="' + clipUrl(d.frigate_event) + '"></video>'
       : '<img src="' + snapUrl(d.frigate_event) + '" alt="Snapshot of ' + esc(d.common_name) + '">';
@@ -258,7 +261,7 @@
       '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><h2><a href="' + speciesHref(d.scientific_name) + '" style="color:inherit;text-decoration:none">' + esc(d.common_name) + '</a></h2>' + confPill(d.score) + '</div>' +
       '<div class="muted" style="margin-top:4px"><i>' + esc(d.scientific_name) + '</i> · ' + esc(fmtShort(d.time)) + ' · ' + esc(d.camera) + '</div></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      (mode === 'clip' ? '<button class="btn" type="button" data-vact="snap">Snapshot</button>' : '<button class="btn primary" type="button" data-vact="clip">' + ICON.play + 'Play clip</button>') +
+      (mode === 'clip' ? '<button class="btn" type="button" data-vact="snap">Snapshot</button>' : clipsOn() ? '<button class="btn primary" type="button" data-vact="clip">' + ICON.play + 'Play clip</button>' : '') +
       '<button class="btn" type="button" data-vact="fix">Fix ID</button>' +
       (d.flagged ? '<button class="btn" type="button" data-act="keep" data-ids="' + d.id + '">Keep</button>' : '') +
       '<button class="btn icon danger" type="button" aria-label="Delete detection" data-act="delete" data-ids="' + d.id + '">' + ICON.trash + '</button>' +
@@ -301,10 +304,10 @@
   function frigateLink() {
     var f = status && status.frigate_ui;
     if (!f || !f.url) return '';
-    return '<a class="btn" href="' + esc(f.url) + '" target="' + (f.ingress ? '_top' : '_blank') + '" rel="noopener">Open Frigate</a>';
+    return '<a class="btn" href="' + esc(f.url) + '" target="' + (f.ingress ? '_top' : '_blank') + '" rel="noopener">Open ' + esc(f.label || 'Frigate') + '</a>';
   }
 
-  var liveCams = null;  // Frigate's cameras, fetched the first time the live view opens
+  var liveCams = null;  // the source's cameras, fetched the first time the live view opens
 
   function openLive(cam) {
     if (!liveCams) {
@@ -320,12 +323,12 @@
     var names = liveCams.map(function (c) { return c.name; });
     var inner = viewer.querySelector('.viewer-inner');
     if (!cam) {
-      inner.innerHTML = '<div class="viewer-body"><div><h2>No cameras found</h2><p class="muted">Frigate didn’t report any enabled cameras. Check the Frigate URL in the add-on configuration.</p></div>' +
+      inner.innerHTML = '<div class="viewer-body"><div><h2>No cameras found</h2><p class="muted">' + esc(srcName()) + ' didn’t report any enabled cameras. Check the add-on configuration.</p></div>' +
         '<div style="display:flex;gap:8px">' + frigateLink() + '<button class="btn icon" type="button" aria-label="Close" data-vclose="1">' + ICON.x + '</button></div></div>';
     } else {
       inner.innerHTML =
         '<div class="live-media"><img id="live-img" alt="Live view of ' + esc(cam) + '"><span class="live-badge"><span class="dot"></span>LIVE · ' + esc(cam) + '</span></div>' +
-        '<div class="viewer-body"><div><h2>' + esc(cam) + '</h2><p class="muted" style="margin:4px 0 0;font-size:14px" id="live-note">Latest frame from Frigate, refreshed every second.</p></div>' +
+        '<div class="viewer-body"><div><h2>' + esc(cam) + '</h2><p class="muted" style="margin:4px 0 0;font-size:14px" id="live-note">Latest frame from ' + esc(srcName()) + ', refreshed every second.</p></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         (names.length > 1 ? '<label style="display:flex"><span class="vh">Camera</span><select class="field" id="live-cam">' + names.map(function (c) {
           return '<option' + (c === cam ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></label>' : '') +
@@ -349,7 +352,7 @@
       };
       next.onerror = function () {
         fails++;
-        if (fails === 3) document.getElementById('live-note').textContent = 'Can’t reach this camera through Frigate right now; retrying.';
+        if (fails === 3) document.getElementById('live-note').textContent = 'Can’t reach this camera through ' + srcName() + ' right now; retrying.';
         liveTimer = setTimeout(tick, 3000);
       };
       next.src = 'live/' + enc(cam) + '.jpg?h=' + h + '&t=' + Date.now();
@@ -474,7 +477,7 @@
           '<div class="muted" style="margin-top:6px"><i>' + esc(d.scientific_name) + '</i> · ' + esc(fmtTime(d.time)) + ' · ' + esc(d.camera) +
           (v.count > 1 ? ' · ' + v.count + ' detections in this visit' : '') + '</div></div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn primary" type="button" data-act="view" data-mode="clip" data-det="' + detData(d) + '">' + ICON.play + 'Play clip</button>' +
+          (clipsOn() ? '<button class="btn primary" type="button" data-act="view" data-mode="clip" data-det="' + detData(d) + '">' + ICON.play + 'Play clip</button>' : '') +
           '<button class="btn" type="button" data-act="view" data-mode="fix" data-det="' + detData(d) + '">Fix ID</button>' +
           '<button class="btn icon" type="button" aria-label="Delete detection" data-act="delete" data-ids="' + d.id + '">' + ICON.trash + '</button>' +
           '</div></div></article>';
@@ -516,7 +519,7 @@
           }).join('') + '</div></div>' : '<p class="muted">Nothing to chart yet.</p>') + '</section>';
 
       var recent = '<section class="stack"><div class="sec-head"><h2 class="disp big" style="font-size:24px">' + (isToday ? 'Recent visits' : 'Visits up to that day') + '</h2><a href="#/history" style="font-size:14px">Browse all history</a></div>' +
-        (cards ? '<div class="visits">' + cards + '</div>' : emptyCard('No visits yet', 'Detections show up here as soon as Frigate spots a bird.')) + '</section>';
+        (cards ? '<div class="visits">' + cards + '</div>' : emptyCard('No visits yet', 'Detections show up here as soon as ' + srcName() + ' spots a bird.')) + '</section>';
 
       return head + tiles + (hero ? '<section class="row">' + hero + top + '</section>' : '<section class="row">' + top + '</section>') + recent + heat;
     });
@@ -597,7 +600,7 @@
                 '<div class="who"><a href="' + speciesHref(d.scientific_name) + '">' + esc(d.common_name) + '</a><div class="sci">' + esc(d.scientific_name) + '</div></div>' +
                 (d.flagged ? '<span class="pill lo">needs review</span>' : '') + confPill(d.score) +
                 '<span class="muted cam" style="font-size:13px;min-width:70px">' + esc(d.camera) + '</span>' +
-                '<div class="acts"><button class="btn icon" type="button" aria-label="Play clip" data-act="view" data-mode="clip" data-det="' + detData(d) + '">' + ICON.play + '</button>' +
+                '<div class="acts">' + (clipsOn() ? '<button class="btn icon" type="button" aria-label="Play clip" data-act="view" data-mode="clip" data-det="' + detData(d) + '">' + ICON.play + '</button>' : '') +
                 '<button class="btn icon" type="button" aria-label="Fix identification" data-act="view" data-mode="fix" data-det="' + detData(d) + '">' + ICON.edit + '</button>' +
                 '<button class="btn icon" type="button" aria-label="Delete detection" data-act="delete" data-ids="' + d.id + '">' + ICON.trash + '</button></div></div>';
             }).join('');
@@ -885,7 +888,7 @@
     var prefix = st.mqtt.topic_prefix;
     var mq = status.mqtt || {};
     var watch = res[1], recent = res[2];
-    var conn = '<section class="card pad stack"><div class="toggle-head"><div><h2>MQTT connection</h2><p class="sub">Uses the broker from <span class="mono">config.yml</span>, the same one Frigate events arrive on.</p></div>' +
+    var conn = '<section class="card pad stack"><div class="toggle-head"><div><h2>MQTT connection</h2><p class="sub">Uses the broker from <span class="mono">config.yml</span>, the same one ' + esc(srcName()) + ' events arrive on.</p></div>' +
       '<span class="pill status ' + (mq.connected ? 'on' : 'off') + '"><span class="dot"></span>' + (mq.connected ? 'Connected' : 'Not connected') + '</span></div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;align-items:end">' +
       '<div class="lf"><span class="label">Broker</span><span class="mono" style="min-height:44px;display:flex;align-items:center">' + esc(status.broker) + '</span></div>' +
@@ -972,9 +975,9 @@
     var usingApp = Array.isArray(data.selected) && data.selected.length;
     var rows = data.cameras.map(function (c, i) {
       var tags = [];
-      if (c.missing) tags.push('<span class="pill lo">not in Frigate</span>');
+      if (c.missing) tags.push('<span class="pill lo">not in ' + esc(srcName()) + '</span>');
       else {
-        tags.push(c.tracks_bird ? '<span class="pill ok">tracks birds</span>' : '<span class="pill lo">not tracking “bird”</span>');
+        if (c.tracks_bird != null) tags.push(c.tracks_bird ? '<span class="pill ok">tracks birds</span>' : '<span class="pill lo">not tracking “bird”</span>');
         if (c.snapshots === false) tags.push('<span class="pill lo">snapshots off</span>');
         if (c.enabled === false) tags.push('<span class="pill line">disabled</span>');
       }
@@ -990,10 +993,13 @@
         (c.missing ? '' : '<button class="btn" type="button" data-live="' + esc(c.name) + '">Live view</button>') + '</div>';
     }).join('');
     return '<section class="card stack" style="padding:22px 0 8px"><div style="padding:0 24px"><h2>Cameras to watch</h2>' +
-      '<p class="sub">These are the cameras Frigate reports. Bird events from checked cameras are identified and recorded; others are skipped. ' +
-      'A camera needs Frigate to track the <span class="mono">bird</span> object, with snapshots on.</p></div>' +
+      (status.source === 'blueiris'
+        ? '<p class="sub">These are the cameras in the add-on’s <span class="mono">cameras</span> option, by Blue Iris short name. Alerts from checked cameras are identified and recorded; others are skipped. ' +
+          'Blue Iris decides what is a bird: the camera’s alert needs CodeProject.AI to confirm <span class="mono">bird</span>, with the MQTT alert action set up.</p></div>'
+        : '<p class="sub">These are the cameras Frigate reports. Bird events from checked cameras are identified and recorded; others are skipped. ' +
+          'A camera needs Frigate to track the <span class="mono">bird</span> object, with snapshots on.</p></div>') +
       (data.error ? '<div class="flagbox" style="margin:0 24px">' + esc(data.error) + '</div>' : '') +
-      (rows || '<p class="muted" style="padding:0 24px">Frigate didn’t report any cameras.</p>') +
+      (rows || '<p class="muted" style="padding:0 24px">' + esc(srcName()) + ' didn’t report any cameras.</p>') +
       '<div class="inline" style="padding:12px 24px 10px;border-top:1px solid var(--line3)">' +
       '<button class="btn primary" type="button" id="cam-save" disabled>Save</button>' +
       (usingApp ? '<button class="btn ghost" type="button" id="cam-reset">Use the add-on option instead (' + esc((data.config_cameras || []).join(', ') || 'none') + ')</button>' : '') +
@@ -1027,9 +1033,15 @@
   }
 
   function settingsStorage(st) {
-    return '<section class="card pad stack"><div class="toggle-head"><div><h2>Keep snapshots</h2><p class="sub">Save a copy of each bird’s pictures when it’s detected, so they outlive Frigate’s retention.</p></div>' +
-      sw('st-cache', st.snapshots.cache, 'Keep snapshots') + '</div>' +
+    var bi = status.source === 'blueiris';
+    return '<section class="card pad stack"><div class="toggle-head"><div><h2>Keep snapshots</h2><p class="sub">' +
+      (bi ? 'Always on with Blue Iris: the cache is the only copy of each bird’s pictures.'
+        : 'Save a copy of each bird’s pictures when it’s detected, so they outlive Frigate’s retention.') + '</p></div>' +
+      sw('st-cache', bi || st.snapshots.cache, 'Keep snapshots', bi ? ' disabled' : '') + '</div>' +
       '<p class="mono muted" style="margin:0">' + num(status.cache.files) + ' files · ' + fmtBytes(status.cache.bytes) + '</p></section>' +
+      (status.frigate_url ? '<section class="card pad stack"><div><h2>Copy pictures from Frigate</h2><p class="sub">Saves Frigate’s snapshots for every past detection that isn’t cached yet, so history keeps its pictures after Frigate is removed. ' +
+        'Run it while Frigate is still reachable. Clips aren’t copied and stop working once Frigate is gone.</p></div>' +
+        '<div class="inline"><button class="btn" type="button" id="st-backfill">Copy pictures now</button><span id="st-backfill-msg" class="muted"></span></div></section>' : '') +
       '<section class="card pad stack"><div><h2>External address</h2><p class="sub">Optional. If this app is reachable at a URL, it goes in MQTT payloads as <span class="mono">snapshot_url</span>. Not needed for the Home Assistant camera entity.</p></div>' +
       '<label class="lf"><span class="label">Base URL</span><input class="field mono" id="st-base" placeholder="http://192.168.1.10:7766" value="' + esc(st.snapshots.base_url) + '"></label></section>' +
       '<section class="card pad stack"><div><h2>Move or back up your data</h2><p class="sub">Download the detection database, or import history from another install. You can upload a <span class="mono">speciesid.db</span> file, or a Home Assistant backup of the original WhosAtMyFeeder add-on (the <span class="mono">.tar</span> file, unencrypted). Imports merge; nothing already here is overwritten.</p></div>' +
@@ -1041,9 +1053,10 @@
   function settingsAbout() {
     return '<section class="card pad stack"><h2>Who’s At My Feeder ' + esc(status.version) + '</h2>' +
       '<table class="tbl"><tbody>' +
-      [['Frigate', status.frigate_url], ['MQTT broker', status.broker], ['Cameras', status.cameras.join(', ')],
+      [['Event source', srcName() + (status.source_url ? ' · ' + status.source_url : '')]].concat(
+        status.source === 'blueiris' && status.frigate_url ? [['Frigate (old pictures)', status.frigate_url]] : []).concat([['MQTT broker', status.broker], ['Cameras', status.cameras.join(', ')],
         ['Detection threshold', pct(status.threshold)], ['First detection', status.earliest_date ? fmtDay(status.earliest_date, { month: 'long', day: 'numeric', year: 'numeric' }) : '—'],
-        ['Last detection', status.last_detection ? status.last_detection.common_name + ', ' + fmtShort(status.last_detection.time) : '—']].map(function (r) {
+        ['Last detection', status.last_detection ? status.last_detection.common_name + ', ' + fmtShort(status.last_detection.time) : '—']]).map(function (r) {
         return '<tr><th scope="row" style="width:220px">' + esc(r[0]) + '</th><td class="mono">' + esc(r[1]) + '</td></tr>';
       }).join('') + '</tbody></table>' +
       '<p class="sub" style="margin:0">Bird classification uses the Google AIY birds V1 model. Based on <a href="https://github.com/mmcc-xx/WhosAtMyFeeder" target="_blank" rel="noopener">mmcc-xx/WhosAtMyFeeder</a>. Fonts: IBM Plex and Bricolage Grotesque (SIL OFL).</p></section>';
@@ -1156,6 +1169,24 @@
     }
     if (section === 'storage') {
       onSwitch('st-cache', function (v) { save({ snapshots: { cache: v } }); });
+      var bf = document.getElementById('st-backfill');
+      if (bf) {
+        var bfMsg = document.getElementById('st-backfill-msg');
+        var showBf = function (d) {
+          if (!document.body.contains(bfMsg)) return;
+          var counts = d.total == null ? '' : num(d.done) + ' of ' + num(d.total) + ' · ' + num(d.saved) + ' saved' +
+            (d.gone ? ' · ' + num(d.gone) + ' already gone from Frigate' : '') + (d.failed ? ' · ' + num(d.failed) + ' failed' : '');
+          bf.disabled = !!d.running;
+          bfMsg.className = d.error ? 'errmsg' : (d.running ? 'muted' : 'okmsg');
+          bfMsg.textContent = d.running ? 'Copying… ' + counts : d.finished ? 'Done. ' + counts + (d.error ? ' · ' + d.error : '') : '';
+          if (d.running) setTimeout(function () { api('snapshots/backfill').then(showBf).catch(function () {}); }, 1500);
+          else if (d.finished) loadStatus();
+        };
+        api('snapshots/backfill').then(showBf).catch(function () {});
+        bf.addEventListener('click', function () {
+          api('snapshots/backfill', { method: 'POST', body: {} }).then(showBf).catch(fail);
+        });
+      }
       onChange('st-base', function (el) { save({ snapshots: { base_url: el.value.trim() } }); });
       var imp = document.getElementById('st-import');
       imp.addEventListener('change', function () {

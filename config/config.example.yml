@@ -1,13 +1,22 @@
+# Where bird events come from: frigate or blueiris
+source: blueiris
 frigate:
+  # Only needed with source: frigate (or to keep old Frigate pictures/clips reachable)
   frigate_url: http://192.168.1.75:5000
+  # The MQTT broker is used for both sources and for this app's own alerts
   mqtt_server: 192.168.1.75
   mqtt_auth: false
   mqtt_username: username
   mqtt_password: password
   main_topic: frigate
   camera:
-    - birdcam
+    - BirdFeeder
   object: bird
+blueiris:
+  url: http://192.168.1.20:81
+  username: wamf
+  password: password
+  topic: BlueIris/+/alert
 classification:
   model: model.tflite
   threshold: 0.7

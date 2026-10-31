@@ -1,7 +1,7 @@
 name: Who's At My Feeder - Fork
-version: "2.2.1"
+version: "2.3.0"
 slug: whosatmyfeeder
-description: Identifies the bird species Frigate detects, with searchable history, stats and MQTT alerts.
+description: Identifies the bird species Frigate or Blue Iris detects, with searchable history, stats and MQTT alerts.
 url: https://github.com/rw377/WhosAtMyFeeder
 arch:
   - amd64
@@ -20,16 +20,23 @@ ports:
 ports_description:
   7766/tcp: Direct web UI access (optional; the sidebar panel works without it)
 options:
+  source: frigate
   frigate_url: http://ccab4aaf-frigate:5000
   cameras:
-    - birdcam
+    - BirdFeeder
   frigate_topic: frigate
+  bi_topic: BlueIris/+/alert
   threshold: 0.7
 schema:
-  frigate_url: url
+  source: list(frigate|blueiris)
+  frigate_url: url?
   cameras:
     - str
   frigate_topic: str
+  bi_url: url?
+  bi_username: str?
+  bi_password: password?
+  bi_topic: str?
   threshold: float(0.1,0.99)
   mqtt_server: str?
   mqtt_port: port?

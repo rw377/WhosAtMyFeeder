@@ -1,5 +1,8 @@
 """Which birds are at the feeder right now.
 
+With Blue Iris there are no tracking or "end" messages: each alert refreshes one
+entry per camera, which expires STALE_AFTER after the last alert.
+
 Frigate sends a "new" event when it starts tracking a bird, "update" events while
 it's there, and an "end" event when it leaves. Each tracked bird is kept here from
 its first event until its "end" (or until it goes quiet for too long, in case an
@@ -35,14 +38,16 @@ class Presence(object):
             b['updated'] = now
         self._changed(now)
 
-    def identified(self, event_id, camera, scientific_name, common_name, confidence, now=None):
-        """The classifier named this bird with enough confidence."""
+    def identified(self, event_id, camera, scientific_name, common_name, confidence, now=None, latest=False):
+        """The classifier named this bird with enough confidence. latest=True: the newest
+        identification replaces the old one even if less confident (Blue Iris, where one
+        entry per camera stands for whatever bird the latest alert saw)."""
         now = now or datetime.now()
         with self._lock:
             b = self._birds.get(event_id)
             if b is None:  # identification arrived before/without a tracking message
                 b = self._birds[event_id] = {'camera': camera, 'since': now, 'confidence': 0.0}
-            if confidence >= b.get('confidence', 0.0) or not b.get('scientific_name'):
+            if latest or confidence >= b.get('confidence', 0.0) or not b.get('scientific_name'):
                 b.update(scientific_name=scientific_name, common_name=common_name, confidence=float(confidence))
             b['updated'] = now
         self._changed(now)

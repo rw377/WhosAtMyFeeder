@@ -14,6 +14,8 @@ This fork adds a new interface and alerting on top of the original detector:
 * **Data quality**: low-confidence and first-time detections are flagged for review; fix an ID,
   delete it, or hide a species entirely.
 * **Snapshots are kept** locally, so pictures survive Frigate's retention.
+* **Frigate or Blue Iris**: take bird events from Frigate, or from Blue Iris alerts
+  confirmed by CodeProject.AI (`source: blueiris`), so Frigate doesn't have to run just for the feeder.
 * Works behind Home Assistant ingress. Existing `speciesid.db` files upgrade automatically.
 
 ### Screenshots
@@ -57,12 +59,30 @@ This fork adds a new interface and alerting on top of the original detector:
 
 Add this repository in **Settings → Add-ons → Add-on Store → ⋮ → Repositories**:
 `https://github.com/rw377/WhosAtMyFeeder`, then install **Who's At My Feeder - Fork**.
-See [whosatmyfeeder/DOCS.md](whosatmyfeeder/DOCS.md) for options and for moving data over from the original add-on.
+See [whosatmyfeeder/DOCS.md](whosatmyfeeder/DOCS.md) for options, Blue Iris setup, and for moving data over from the original add-on.
+
+### Blue Iris instead of Frigate
+
+Set `source: blueiris`. In Blue Iris, have CodeProject.AI confirm `bird` on the
+camera (analysing the main stream), and add an **On alert** MQTT action:
+
+* topic `BlueIris/&CAM/alert`
+* payload `{"id":"&ALERT_DB","camera":"&CAM","detections":&JSON}`
+
+Then give the app the Blue Iris web server and a user (`bi_url`, `bi_username`,
+`bi_password`; in `config.yml` these are `blueiris: url/username/password/topic`)
+and list the camera by its Blue Iris short name (case-sensitive). For each alert the
+app downloads the full alert image, crops out the most confident `bird` box (padded
+~12%) and classifies the crop. Pictures are cached locally; there are no clips.
+[DOCS.md](whosatmyfeeder/DOCS.md#using-blue-iris-instead-of-frigate) has the details and the
+steps for moving an existing install off Frigate without losing its pictures.
 
 ### Docker
 
 Same as before (below), except the sample config is now `config/config.example.yml`: copy it to
 `config/config.yml` and edit. An optional `mqtt_port` setting is supported under `frigate:`.
+The MQTT broker settings stay under `frigate:` whichever source you use. The example uses
+Blue Iris; for Frigate, set `source: frigate` (or leave `source` out).
 
 This app acts as sidecar to [Frigate](https://frigate.video/) to identify the species of
 the birds that Frigate detects. It is using the bird species classifier model found here: https://tfhub.dev/google/lite-model/aiy/vision/classifier/birds_V1/3

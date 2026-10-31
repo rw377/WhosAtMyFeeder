@@ -58,6 +58,11 @@ SETTINGS_DEFAULTS = {
 }
 
 
+def source(config):
+    """Where bird events come from: 'frigate' (default) or 'blueiris'."""
+    return 'blueiris' if str(config.get('source') or '').strip().lower() == 'blueiris' else 'frigate'
+
+
 def effective_cameras(config, settings=None):
     """Cameras to process: the in-app selection if one is saved, otherwise the
     config / add-on option."""
