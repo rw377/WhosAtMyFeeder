@@ -116,6 +116,13 @@ def handle_event(payload_dict, topic=None):
         return
     cam = ev['camera']
     cameras = watched_cameras()
+    if SOURCE == 'blueiris' and ev.get('box') is None:
+        # An alert without a bird. Other cameras' alerts often share the topic, so
+        # only mention it for watched cameras, and never count it as a skipped bird.
+        if cam in cameras:
+            print('Blue Iris alert %s from %s has no "bird" box (labels: %s); ignoring' %
+                  (ev['alert_id'], cam, ', '.join(ev.get('labels') or []) or 'none'), flush=True)
+        return
     now_s = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     if cam not in cameras:
         # Say so instead of dropping the event silently: a camera-name typo in the
